@@ -1,9 +1,9 @@
-# app.py
-
 from datetime import date, datetime
 from io import BytesIO
 
 import pandas as pd
+from firebase_admin import auth
+from utils import check_auth_status, login_form, show_login_warning
 import streamlit as st
 
 # ------- Optional plotting (don't crash if not installed) -------
@@ -32,7 +32,14 @@ st.set_page_config(
     layout="wide",
 )
 
-# Import utilities AFTER set_page_config
+# ✅ --- AUTHENTICATION BLOCK ---
+user = check_auth_status()
+if not user:
+    login_form()
+    show_login_warning()
+    st.stop()
+
+# ✅ --- After login, show app ---
 from utils import (
     USE_FIRESTORE,
     load_orders,
@@ -53,7 +60,6 @@ else:
 
 # --- App header ---
 st.title("Requiva — Smart Lab Order Intelligence")
-
 
 # ======================
 # ➕ New Order
