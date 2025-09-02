@@ -1,5 +1,3 @@
-# utils.py
-
 import os
 import json
 from datetime import datetime
@@ -21,7 +19,7 @@ DATA_PATH = os.getenv("REQUIVA_DATA_PATH", "data/orders.csv")
 # 🔐 Firebase Setup (Render-safe)
 # ----------------------
 
-FIREBASE_CREDENTIAL_PATH = "/etc/secrets/firebase-service-account.json"  # 👈 Render will mount your secret file here
+FIREBASE_CREDENTIAL_PATH = "/etc/secrets/firebase-service-account.json"
 
 def _init_firestore_from_file():
     if not os.path.exists(FIREBASE_CREDENTIAL_PATH):
@@ -45,7 +43,6 @@ def _init_firestore_from_file():
         st.warning(f"⚠️ Firebase init failed. Using CSV. \n\nDetails: {e}")
         return None
 
-# 🔄 Initialize Firestore client
 db = _init_firestore_from_file()
 USE_FIRESTORE = db is not None
 
@@ -129,3 +126,66 @@ def validate_order(item: str, qty, price, vendor: str) -> Tuple[bool, str]:
     if not vendor or str(vendor).strip() == "":
         return False, "VENDOR is required."
     return True, ""
+
+# ----------------------
+# 🔐 Firebase AUTH – Login, Sign Up, Forgot Password
+# ----------------------
+
+def check_auth_status():
+    return st.session_state.get("user", None)
+
+def login_form():
+    st.subheader("🔐 Sign In to Requiva")
+    email = st.text_input("Email", key="email_input")
+    password = st.text_input("Password", type="password", key="password_input")
+
+    col1, col2, col3 = st.columns([1, 1, 2])
+    with col1:
+        if st.button("Sign In"):
+            _sign_in(email, password)
+    with col2:
+        if st.button("Forgot Password"):
+            _reset_password(email)
+    with col3:
+        if st.button("Create Account"):
+            _create_account(email, password)
+
+def _sign_in(email, password):
+    try:
+        from firebase_admin import auth
+        import requests
+        # Firebase sign-in via REST API
+        api_key = st.secrets["firebase"]["apiKey"]
+        resp = requests.post(
+            f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={api_key}",
+            json={"email": email, "password": password, "returnSecureToken": True},
+        )
+        resp.raise_for_status()
+        st.session_state["user"] = resp.json()
+        st.success("✅ Signed in successfully!")
+        st.experimental_rerun()
+    except Exception as e:
+        st.error(f"Sign-in failed: {e}")
+
+def _reset_password(email):
+    try:
+        import requests
+        api_key = st.secrets["firebase"]["apiKey"]
+        resp = requests.post(
+            f"https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key={api_key}",
+            json={"requestType": "PASSWORD_RESET", "email": email},
+        )
+        resp.raise_for_status()
+        st.info("📧 Password reset email sent.")
+    except Exception as e:
+        st.error(f"Reset failed: {e}")
+
+def _create_account(email, password):
+    try:
+        user = auth.create_user(email=email, password=password)
+        st.success("✅ Account created! Please sign in.")
+    except Exception as e:
+        st.error(f"Signup failed: {e}")
+
+def show_login_warning():
+    st.info("ℹ️ Please sign in to use Requiva.")
