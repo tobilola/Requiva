@@ -6,6 +6,10 @@ from typing import Tuple
 import pandas as pd
 import streamlit as st
 
+# ----------------------
+# 📌 Constants
+# ----------------------
+
 REQUIRED_COLUMNS = [
     "REQ#", "ITEM", "NUMBER OF ITEM", "AMOUNT PER ITEM", "TOTAL",
     "VENDOR", "CAT #", "GRANT USED", "PO SOURCE", "PO #",
@@ -14,18 +18,16 @@ REQUIRED_COLUMNS = [
 ]
 
 DATA_PATH = os.getenv("REQUIVA_DATA_PATH", "data/orders.csv")
-
-# ----------------------
-# 🔐 Firebase Setup (Render-safe)
-# ----------------------
-
 FIREBASE_CREDENTIAL_PATH = "/etc/secrets/firebase-service-account.json"
+
+# ----------------------
+# 🔐 Firebase Setup
+# ----------------------
 
 def _init_firestore_from_file():
     if not os.path.exists(FIREBASE_CREDENTIAL_PATH):
         st.warning("⚠️ Firebase service account file not found. Using local CSV.")
         return None
-
     try:
         import firebase_admin
         from firebase_admin import credentials, firestore
@@ -40,7 +42,7 @@ def _init_firestore_from_file():
         return firestore.client()
 
     except Exception as e:
-        st.warning(f"⚠️ Firebase init failed. Using CSV. \n\nDetails: {e}")
+        st.warning(f"⚠️ Firebase init failed. Using CSV.\n\nDetails: {e}")
         return None
 
 db = _init_firestore_from_file()
@@ -91,7 +93,7 @@ def save_orders(df: pd.DataFrame):
         df.to_csv(DATA_PATH, index=False)
 
 # ----------------------
-# 🛠 Utility Functions
+# 🧮 Utility Functions
 # ----------------------
 
 def gen_req_id(df: pd.DataFrame) -> str:
@@ -128,64 +130,36 @@ def validate_order(item: str, qty, price, vendor: str) -> Tuple[bool, str]:
     return True, ""
 
 # ----------------------
-# 🔐 Firebase AUTH – Login, Sign Up, Forgot Password
+# 🔐 Auth (Simple Lab Email Login + Role Check)
 # ----------------------
 
 def check_auth_status():
     return st.session_state.get("user", None)
 
+def is_admin(user_email: str) -> bool:
+    admin_email = st.secrets.get("auth", {}).get("admin_email", "")
+    return user_email.lower() == admin_email.lower()
+
+def get_user_lab(user_email: str) -> str:
+    domain = user_email.split("@")[-1]
+    return st.secrets.get("labs", {}).get(domain, "Unknown Lab")
+
 def login_form():
     st.subheader("🔐 Sign In to Requiva")
-    email = st.text_input("Email", key="email_input")
-    password = st.text_input("Password", type="password", key="password_input")
 
-    col1, col2, col3 = st.columns([1, 1, 2])
-    with col1:
-        if st.button("Sign In"):
-            _sign_in(email, password)
-    with col2:
-        if st.button("Forgot Password"):
-            _reset_password(email)
-    with col3:
-        if st.button("Create Account"):
-            _create_account(email, password)
+    with st.form("login_form"):
+        email = st.text_input("Email")
+        submit = st.form_submit_button("Sign In")
 
-def _sign_in(email, password):
-    try:
-        from firebase_admin import auth
-        import requests
-        # Firebase sign-in via REST API
-        api_key = st.secrets["firebase"]["apiKey"]
-        resp = requests.post(
-            f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={api_key}",
-            json={"email": email, "password": password, "returnSecureToken": True},
-        )
-        resp.raise_for_status()
-        st.session_state["user"] = resp.json()
-        st.success("✅ Signed in successfully!")
-        st.experimental_rerun()
-    except Exception as e:
-        st.error(f"Sign-in failed: {e}")
-
-def _reset_password(email):
-    try:
-        import requests
-        api_key = st.secrets["firebase"]["apiKey"]
-        resp = requests.post(
-            f"https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key={api_key}",
-            json={"requestType": "PASSWORD_RESET", "email": email},
-        )
-        resp.raise_for_status()
-        st.info("📧 Password reset email sent.")
-    except Exception as e:
-        st.error(f"Reset failed: {e}")
-
-def _create_account(email, password):
-    try:
-        user = auth.create_user(email=email, password=password)
-        st.success("✅ Account created! Please sign in.")
-    except Exception as e:
-        st.error(f"Signup failed: {e}")
+    if submit:
+        allowed_domains = st.secrets.get("auth", {}).get("allowed_domains", [])
+        domain = email.split("@")[-1]
+        if domain not in allowed_domains:
+            st.error("❌ Email domain not allowed.")
+        else:
+            st.session_state["user"] = email
+            st.session_state["lab"] = get_user_lab(email)
+            st.experimental_rerun()
 
 def show_login_warning():
-    st.info("ℹ️ Please sign in to use Requiva.")
+    st.info("ℹ️ Please sign in with your lab email to use Requiva.")
