@@ -14,7 +14,7 @@ REQUIRED_COLUMNS = [
     "REQ#", "ITEM", "NUMBER OF ITEM", "AMOUNT PER ITEM", "TOTAL",
     "VENDOR", "CAT #", "GRANT USED", "PO SOURCE", "PO #",
     "NOTES", "ORDERED BY", "DATE ORDERED", "DATE RECEIVED",
-    "RECEIVED BY", "LOCATION KEPT", "REQUESTED BY", "TIME RECEIVED",
+    "RECEIVED BY", "LOCATION KEPT", "REQUESTED BY", "TIME RECEIVED"
 ]
 
 DATA_PATH = os.getenv("REQUIVA_DATA_PATH", "data/orders.csv")
@@ -76,7 +76,6 @@ def load_orders() -> pd.DataFrame:
 
 def save_orders(df: pd.DataFrame):
     df = _ensure_columns(df.copy())
-
     if USE_FIRESTORE and db:
         from google.cloud import firestore as _fs
         batch = db.batch()
@@ -146,7 +145,6 @@ def get_user_lab(user_email: str) -> str:
 
 def login_form():
     st.subheader("🔐 Sign In to Requiva")
-
     with st.form("login_form"):
         email = st.text_input("Email")
         submit = st.form_submit_button("Sign In")
