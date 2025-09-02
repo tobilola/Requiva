@@ -12,6 +12,8 @@ from utils import (
     show_login_warning,
     is_admin,
     get_user_lab,
+    generate_alert_column,
+    filter_unreceived_orders,
 )
 
 # 🚩 MUST be the first Streamlit call
@@ -143,6 +145,7 @@ with tab_new:
 with tab_table:
     st.subheader("Orders Table")
     df = load_orders()
+    df = generate_alert_column(df)
 
     c1, c2, c3 = st.columns(3)
     with c1:
@@ -160,7 +163,13 @@ with tab_table:
     if po_source_filter != "All":
         filtered = filtered[filtered["PO SOURCE"] == po_source_filter]
 
-    st.dataframe(filtered, use_container_width=True)
+    st.dataframe(filtered[["REQ#", "ITEM", "VENDOR", "DATE ORDERED", "RECEIVED BY", "ALERT"]], use_container_width=True)
+
+    overdue = filter_unreceived_orders(filtered)
+    if not overdue.empty:
+        st.warning(f"⚠️ {len(overdue)} items pending receipt — follow up needed.")
+    else:
+        st.success("✅ All recent items have been marked as received.")
 
 # ======================
 # 📈 Analytics
