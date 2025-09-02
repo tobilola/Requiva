@@ -3,27 +3,16 @@ from io import BytesIO
 
 import pandas as pd
 from firebase_admin import auth
-from utils import check_auth_status, login_form, show_login_warning
 import streamlit as st
 
-# ------- Optional plotting (don't crash if not installed) -------
-try:
-    import matplotlib.pyplot as plt
-    HAS_MPL = True
-except Exception:
-    HAS_MPL = False
-
-# ------- Pick an Excel writer engine that exists -------
-EXCEL_ENGINE = None
-try:
-    import openpyxl  # noqa: F401
-    EXCEL_ENGINE = "openpyxl"
-except Exception:
-    try:
-        import xlsxwriter  # noqa: F401
-        EXCEL_ENGINE = "xlsxwriter"
-    except Exception:
-        EXCEL_ENGINE = None
+# 🔐 AUTH MODULE
+from utils import (
+    check_auth_status,
+    login_form,
+    show_login_warning,
+    is_admin,
+    get_user_lab,
+)
 
 # 🚩 MUST be the first Streamlit call
 st.set_page_config(
@@ -33,13 +22,20 @@ st.set_page_config(
 )
 
 # ✅ --- AUTHENTICATION BLOCK ---
-user = check_auth_status()
-if not user:
+user_email = check_auth_status()
+if not user_email:
     login_form()
     show_login_warning()
     st.stop()
 
-# ✅ --- After login, show app ---
+lab_name = get_user_lab(user_email)
+st.sidebar.success(f"🔬 Lab: {lab_name}")
+st.sidebar.markdown(f"👤 Logged in as: `{user_email}`")
+
+if is_admin(user_email):
+    st.sidebar.info("🛠 Admin privileges enabled")
+
+# 🔧 UTILS
 from utils import (
     USE_FIRESTORE,
     load_orders,
@@ -60,6 +56,25 @@ else:
 
 # --- App header ---
 st.title("Requiva — Smart Lab Order Intelligence")
+
+# Try importing matplotlib
+try:
+    import matplotlib.pyplot as plt
+    HAS_MPL = True
+except Exception:
+    HAS_MPL = False
+
+# --- Excel writer engine ---
+EXCEL_ENGINE = None
+try:
+    import openpyxl
+    EXCEL_ENGINE = "openpyxl"
+except Exception:
+    try:
+        import xlsxwriter
+        EXCEL_ENGINE = "xlsxwriter"
+    except Exception:
+        EXCEL_ENGINE = None
 
 # ======================
 # ➕ New Order
