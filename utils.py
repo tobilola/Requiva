@@ -180,4 +180,3 @@ def generate_alert_column(df: pd.DataFrame) -> pd.Series:
             alert_flags.append("")  # No alert
 
     return pd.Series(alert_flags)
-
