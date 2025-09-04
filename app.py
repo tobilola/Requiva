@@ -4,6 +4,8 @@ from io import BytesIO
 import pandas as pd
 from firebase_admin import auth
 import streamlit as st
+from utils import generate_alert_column
+
 
 # 🔐 AUTH MODULE
 from utils import (
