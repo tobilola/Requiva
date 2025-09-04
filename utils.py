@@ -161,3 +161,23 @@ def login_form():
 
 def show_login_warning():
     st.info("ℹ️ Please sign in with your lab email to use Requiva.")
+
+# ----------------------
+# 🚨 Alert Column Generator
+# ----------------------
+
+def generate_alert_column(df: pd.DataFrame) -> pd.Series:
+    """
+    Flags unreceived orders for alert display.
+    Returns a new Series with alert indicators (e.g., 🚨) where needed.
+    """
+    alert_flags = []
+
+    for _, row in df.iterrows():
+        if pd.isna(row["DATE RECEIVED"]) or str(row["DATE RECEIVED"]).strip() == "":
+            alert_flags.append("🚨 Not received")
+        else:
+            alert_flags.append("")  # No alert
+
+    return pd.Series(alert_flags)
+
