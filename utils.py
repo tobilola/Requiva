@@ -7,6 +7,9 @@ from typing import Tuple
 import pandas as pd
 import streamlit as st
 
+def show_login_warning():
+    st.warning("🔒 Please log in to access this app.")
+
 # ----------------------
 # 📌 Constants
 # ----------------------
