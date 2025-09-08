@@ -22,23 +22,24 @@ from utils import (
     REQUIRED_COLUMNS,
 )
 
-# 🚩 Set up Streamlit layout
+# 🚩 Streamlit layout setup
 st.set_page_config(page_title="Requiva — Smart Lab Order Intelligence", page_icon="🥚", layout="wide")
 
-# 🔐 AUTH BLOCK
+# 🔐 Authentication
 user_email = check_auth_status()
 if not user_email:
     login_form()
     show_login_warning()
     st.stop()
 
+# 🧪 Lab & Role Info
 lab_name = get_user_lab(user_email)
 st.sidebar.success(f"🔬 Lab: {lab_name}")
 st.sidebar.markdown(f"👤 Logged in as: `{user_email}`")
 if is_admin(user_email):
     st.sidebar.info("🛠 Admin privileges enabled")
 
-# 🔧 Backend Status
+# 🔌 Backend Mode
 st.write("Backend:", "Firestore ✅" if USE_FIRESTORE else "CSV (dev) ⚠️")
 if USE_FIRESTORE:
     st.success("Connected to Firestore")
@@ -99,8 +100,8 @@ with tab_new:
                 "PO #": po_no,
                 "NOTES": notes,
                 "ORDERED BY": ordered_by,
-                "DATE ORDERED": pd.to_datetime(date_ordered).date().isoformat() if date_ordered else "",
-                "DATE RECEIVED": pd.to_datetime(date_received).date().isoformat() if date_received else "",
+                "DATE ORDERED": date_ordered.isoformat() if date_ordered else "",
+                "DATE RECEIVED": date_received.isoformat() if date_received else "",
                 "RECEIVED BY": received_by,
                 "ITEM LOCATION": location,
             }
@@ -129,6 +130,10 @@ with tab_table:
         filtered = filtered[filtered["GRANT USED"].astype(str).str.contains(grant_filter, case=False, na=False)]
     if po_source_filter != "All":
         filtered = filtered[filtered["PO SOURCE"] == po_source_filter]
+
+    # Ensure filtered is a DataFrame
+    if isinstance(filtered, pd.Series):
+        filtered = filtered.to_frame().T
 
     display_columns = [col for col in ["REQ#", "ITEM", "VENDOR", "DATE ORDERED", "RECEIVED BY", "ALERT"] if col in filtered.columns]
     st.dataframe(filtered[display_columns], use_container_width=True)
