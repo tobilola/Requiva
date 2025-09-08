@@ -5,8 +5,6 @@ import pandas as pd
 from firebase_admin import auth
 import streamlit as st
 
-
-
 # 🔐 AUTH MODULE
 from utils import (
     check_auth_status,
@@ -16,16 +14,23 @@ from utils import (
     get_user_lab,
     generate_alert_column,
     filter_unreceived_orders,
+    USE_FIRESTORE,
+    load_orders,
+    save_orders,
+    gen_req_id,
+    compute_total,
+    validate_order,
+    REQUIRED_COLUMNS,
 )
 
 # 🚩 MUST be the first Streamlit call
 st.set_page_config(
     page_title="Requiva — Smart Lab Order Intelligence",
-    page_icon="🦢",
+    page_icon="🥚",
     layout="wide",
 )
 
-# ✅ --- AUTHENTICATION BLOCK ---
+# ✅ AUTH BLOCK
 user_email = check_auth_status()
 if not user_email:
     login_form()
@@ -39,36 +44,23 @@ st.sidebar.markdown(f"👤 Logged in as: `{user_email}`")
 if is_admin(user_email):
     st.sidebar.info("🛠 Admin privileges enabled")
 
-# 🔧 UTILS
-from utils import (
-    USE_FIRESTORE,
-    load_orders,
-    save_orders,
-    gen_req_id,
-    compute_total,
-    validate_order,
-    REQUIRED_COLUMNS,
-)
-
-# --- Status banner / quick debug ---
+# 🔧 Status Banner
 st.write("Backend:", "Firestore ✅" if USE_FIRESTORE else "CSV (dev) ⚠️")
-
 if USE_FIRESTORE:
     st.success("Connected to Firestore")
 else:
     st.warning("Using local CSV (dev mode). Add Firebase secrets to enable Firestore.")
 
-# --- App header ---
+# 🧠 App Header
 st.title("Requiva — Smart Lab Order Intelligence")
 
-# Try importing matplotlib
+# 🔍 Optional Dependencies
 try:
     import matplotlib.pyplot as plt
     HAS_MPL = True
 except Exception:
     HAS_MPL = False
 
-# --- Excel writer engine ---
 EXCEL_ENGINE = None
 try:
     import openpyxl
@@ -80,13 +72,12 @@ except Exception:
     except Exception:
         EXCEL_ENGINE = None
 
-# ======================
-# ➕ New Order
-# ======================
+# 📊 Tabs
 tab_new, tab_table, tab_analytics, tab_export = st.tabs(
     ["➕ New Order", "📋 Orders", "📈 Analytics", "⬇️ Export"]
 )
 
+# ➕ New Order Tab
 with tab_new:
     st.subheader("Create a New Order")
     df = load_orders()
@@ -97,11 +88,13 @@ with tab_new:
         vendor = st.text_input("VENDOR *", placeholder="e.g., Thermo Fisher")
         cat_no = st.text_input("CAT #", placeholder="e.g., 12345-TF")
         grant_used = st.text_input("GRANT USED", placeholder="e.g., R01CA12345 (comma separated)")
+
     with col2:
         qty = st.number_input("NUMBER OF ITEM *", min_value=0.0, value=0.0, step=1.0)
         unit_price = st.number_input("AMOUNT PER ITEM *", min_value=0.0, value=0.0, step=1.0, format="%.2f")
         po_source = st.selectbox("PO SOURCE", ["ShopBlue", "Stock Room", "External Vendor"], index=0)
         po_no = st.text_input("PO #", placeholder="e.g., PO-2025-00123")
+
     with col3:
         notes = st.text_area("NOTES", placeholder="Any notes (urgent, storage req., etc.)")
         ordered_by = st.text_input("ORDERED BY", placeholder="Name / ID")
@@ -141,9 +134,7 @@ with tab_new:
             save_orders(df)
             st.success(f"Order {req_id} added.")
 
-# ======================
-# 📋 Orders
-# ======================
+# 📋 Orders Table Tab
 with tab_table:
     st.subheader("Orders Table")
     df = load_orders()
@@ -173,15 +164,12 @@ with tab_table:
     else:
         st.success("✅ All recent items have been marked as received.")
 
-# ======================
-# 📈 Analytics
-# ======================
+# 📈 Analytics Tab
 with tab_analytics:
     st.subheader("Top Items by Frequency")
     df = load_orders()
     if not df.empty and "ITEM" in df.columns:
         counts = df["ITEM"].value_counts().head(10)
-
         if HAS_MPL:
             fig, ax = plt.subplots(figsize=(8, 4))
             counts.plot(kind="bar", ax=ax)
@@ -195,9 +183,7 @@ with tab_analytics:
     else:
         st.info("No data yet. Add some orders to see analytics.")
 
-# ======================
-# ⬇️ Export
-# ======================
+# ⬇️ Export Tab
 with tab_export:
     st.subheader("Download Orders")
     df = load_orders()
@@ -224,6 +210,7 @@ with tab_export:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
 
-st.markdown("---")
-st.caption("Requiva MVP • Export includes all locked fields for grant and audit readiness.")
-st.caption("Powered by TOBI HealthOps AI")
+# ℹ️ Footer
+st.markdown(\"\"\"---\"\"\")
+st.caption(\"Requiva MVP • Export includes all locked fields for grant and audit readiness.\")
+st.caption(\"Powered by TOBI HealthOps AI\")
