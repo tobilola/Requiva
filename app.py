@@ -211,6 +211,6 @@ with tab_export:
         )
 
 # ℹ️ Footer
-st.markdown(\"\"\"---\"\"\")
+st.markdown("---")
 st.caption(\"Requiva MVP • Export includes all locked fields for grant and audit readiness.\")
 st.caption(\"Powered by TOBI HealthOps AI\")
