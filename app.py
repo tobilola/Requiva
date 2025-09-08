@@ -2,10 +2,9 @@ from datetime import date, datetime
 from io import BytesIO
 
 import pandas as pd
-from firebase_admin import auth
 import streamlit as st
+import matplotlib.pyplot as plt
 
-# 🔐 AUTH MODULE
 from utils import (
     check_auth_status,
     login_form,
@@ -23,14 +22,10 @@ from utils import (
     REQUIRED_COLUMNS,
 )
 
-# 🚩 MUST be the first Streamlit call
-st.set_page_config(
-    page_title="Requiva — Smart Lab Order Intelligence",
-    page_icon="🥚",
-    layout="wide",
-)
+# 🚩 Set up Streamlit layout
+st.set_page_config(page_title="Requiva — Smart Lab Order Intelligence", page_icon="🥚", layout="wide")
 
-# ✅ AUTH BLOCK
+# 🔐 AUTH BLOCK
 user_email = check_auth_status()
 if not user_email:
     login_form()
@@ -40,11 +35,10 @@ if not user_email:
 lab_name = get_user_lab(user_email)
 st.sidebar.success(f"🔬 Lab: {lab_name}")
 st.sidebar.markdown(f"👤 Logged in as: `{user_email}`")
-
 if is_admin(user_email):
     st.sidebar.info("🛠 Admin privileges enabled")
 
-# 🔧 Status Banner
+# 🔧 Backend Status
 st.write("Backend:", "Firestore ✅" if USE_FIRESTORE else "CSV (dev) ⚠️")
 if USE_FIRESTORE:
     st.success("Connected to Firestore")
@@ -54,30 +48,10 @@ else:
 # 🧠 App Header
 st.title("Requiva — Smart Lab Order Intelligence")
 
-# 🔍 Optional Dependencies
-try:
-    import matplotlib.pyplot as plt
-    HAS_MPL = True
-except Exception:
-    HAS_MPL = False
+# 📊 TABS
+tab_new, tab_table, tab_analytics, tab_export = st.tabs(["➕ New Order", "📋 Orders", "📈 Analytics", "⬇️ Export"])
 
-EXCEL_ENGINE = None
-try:
-    import openpyxl
-    EXCEL_ENGINE = "openpyxl"
-except Exception:
-    try:
-        import xlsxwriter
-        EXCEL_ENGINE = "xlsxwriter"
-    except Exception:
-        EXCEL_ENGINE = None
-
-# 📊 Tabs
-tab_new, tab_table, tab_analytics, tab_export = st.tabs(
-    ["➕ New Order", "📋 Orders", "📈 Analytics", "⬇️ Export"]
-)
-
-# ➕ New Order Tab
+# ➕ NEW ORDER TAB
 with tab_new:
     st.subheader("Create a New Order")
     df = load_orders()
@@ -134,7 +108,7 @@ with tab_new:
             save_orders(df)
             st.success(f"Order {req_id} added.")
 
-# 📋 Orders Table Tab
+# 📋 ORDERS TABLE TAB
 with tab_table:
     st.subheader("Orders Table")
     df = load_orders()
@@ -156,7 +130,8 @@ with tab_table:
     if po_source_filter != "All":
         filtered = filtered[filtered["PO SOURCE"] == po_source_filter]
 
-    st.dataframe(filtered[["REQ#", "ITEM", "VENDOR", "DATE ORDERED", "RECEIVED BY", "ALERT"]], use_container_width=True)
+    display_columns = [col for col in ["REQ#", "ITEM", "VENDOR", "DATE ORDERED", "RECEIVED BY", "ALERT"] if col in filtered.columns]
+    st.dataframe(filtered[display_columns], use_container_width=True)
 
     overdue = filter_unreceived_orders(filtered)
     if not overdue.empty:
@@ -164,31 +139,28 @@ with tab_table:
     else:
         st.success("✅ All recent items have been marked as received.")
 
-# 📈 Analytics Tab
+# 📈 ANALYTICS TAB
 with tab_analytics:
     st.subheader("Top Items by Frequency")
     df = load_orders()
     if not df.empty and "ITEM" in df.columns:
         counts = df["ITEM"].value_counts().head(10)
-        if HAS_MPL:
-            fig, ax = plt.subplots(figsize=(8, 4))
-            counts.plot(kind="bar", ax=ax)
-            ax.set_xlabel("Item")
-            ax.set_ylabel("Orders (count)")
-            ax.set_title("Top 10 Ordered Items")
-            st.pyplot(fig)
-        else:
-            st.info("Matplotlib not available; showing quick chart.")
-            st.bar_chart(counts)
+        fig, ax = plt.subplots(figsize=(8, 4))
+        counts.plot(kind="bar", ax=ax)
+        ax.set_xlabel("Item")
+        ax.set_ylabel("Orders (count)")
+        ax.set_title("Top 10 Ordered Items")
+        st.pyplot(fig)
     else:
         st.info("No data yet. Add some orders to see analytics.")
 
-# ⬇️ Export Tab
+# ⬇️ EXPORT TAB
 with tab_export:
     st.subheader("Download Orders")
     df = load_orders()
-    df = df[REQUIRED_COLUMNS]
+    df = df[[col for col in REQUIRED_COLUMNS if col in df.columns]]
 
+    # CSV Export
     csv_bytes = df.to_csv(index=False).encode("utf-8")
     st.download_button(
         label="Download CSV",
@@ -197,20 +169,18 @@ with tab_export:
         mime="text/csv",
     )
 
-    if EXCEL_ENGINE is None:
-        st.info("Excel export requires `openpyxl` or `xlsxwriter`. Install one in requirements.txt to enable XLSX download.")
-    else:
-        output = BytesIO()
-        with pd.ExcelWriter(output, engine=EXCEL_ENGINE) as writer:
-            df.to_excel(writer, sheet_name="Orders", index=False)
-        st.download_button(
-            label=f"Download Excel ({EXCEL_ENGINE})",
-            data=output.getvalue(),
-            file_name=f"Requiva_Orders_{datetime.now().strftime('%Y%m%d')}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        )
+    # Excel Export
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        df.to_excel(writer, sheet_name="Orders", index=False)
+    st.download_button(
+        label="Download Excel",
+        data=output.getvalue(),
+        file_name=f"Requiva_Orders_{datetime.now().strftime('%Y%m%d')}.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
 
-# ℹ️ Footer
+# ℹ️ FOOTER
 st.markdown("---")
 st.caption("Requiva MVP • Export includes all locked fields for grant and audit readiness.")
 st.caption("Powered by TOBI HealthOps AI")
