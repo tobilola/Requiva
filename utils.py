@@ -1,5 +1,6 @@
 import os
 import json
+import hashlib
 from datetime import datetime
 from typing import Tuple
 
@@ -17,6 +18,7 @@ REQUIRED_COLUMNS = [
     "RECEIVED BY", "LOCATION KEPT", "REQUESTED BY", "TIME RECEIVED"
 ]
 
+USERS_FILE = "data/users.json"
 DATA_PATH = os.getenv("REQUIVA_DATA_PATH", "data/orders.csv")
 FIREBASE_CREDENTIAL_PATH = "/etc/secrets/firebase-service-account.json"
 
@@ -129,56 +131,86 @@ def validate_order(item: str, qty, price, vendor: str) -> Tuple[bool, str]:
     return True, ""
 
 # ----------------------
-# 🔐 Auth (Simple Lab Email Login + Role Check)
+# 🔐 Auth (Email/Password with Role)
 # ----------------------
 
-def check_auth_status():
-    return st.session_state.get("user", None)
+def hash_password(password: str) -> str:
+    return hashlib.sha256(password.encode()).hexdigest()
 
-def is_admin(user_email: str) -> bool:
-    admin_email = st.secrets.get("auth", {}).get("admin_email", "")
-    return user_email.lower() == admin_email.lower()
+def load_users():
+    if not os.path.exists(USERS_FILE):
+        return {}
+    with open(USERS_FILE, "r") as f:
+        return json.load(f)
 
-def get_user_lab(user_email: str) -> str:
-    domain = user_email.split("@")[-1]
-    return st.secrets.get("labs", {}).get(domain, "Unknown Lab")
+def save_users(users):
+    os.makedirs(os.path.dirname(USERS_FILE), exist_ok=True)
+    with open(USERS_FILE, "w") as f:
+        json.dump(users, f, indent=2)
+
+def is_admin(email: str) -> bool:
+    return email.lower() == "ogunbowaleadeola@gmail.com"
 
 def login_form():
     st.subheader("🔐 Sign In to Requiva")
-    with st.form("login_form"):
-        email = st.text_input("Email")
-        submit = st.form_submit_button("Sign In")
+    tab1, tab2 = st.tabs(["🔐 Sign In", "🆕 Create Account"])
 
-    if submit:
-        allowed_domains = st.secrets.get("auth", {}).get("allowed_domains", [])
-        domain = email.split("@")[-1]
-        if domain not in allowed_domains:
-            st.error("❌ Email domain not allowed.")
-        else:
+    with tab1:
+        with st.form("login_form"):
+            email = st.text_input("Email")
+            password = st.text_input("Password", type="password")
+            submit = st.form_submit_button("Sign In")
+
+        if submit:
+            users = load_users()
+            if email not in users:
+                st.error("❌ Account not found.")
+                return
+            if users[email]["password"] != hash_password(password):
+                st.error("❌ Incorrect password.")
+                return
             st.session_state["user"] = email
-            st.session_state["lab"] = get_user_lab(email)
+            st.session_state["role"] = users[email]["role"]
+            st.success("✅ Login successful!")
             st.experimental_rerun()
 
-def show_login_warning():
-    st.info("ℹ️ Please sign in with your lab email to use Requiva.")
+    with tab2:
+        with st.form("register_form"):
+            new_email = st.text_input("New Email")
+            new_password = st.text_input("New Password", type="password")
+            confirm_password = st.text_input("Confirm Password", type="password")
+            create = st.form_submit_button("Create Account")
+
+        if create:
+            users = load_users()
+            if new_email in users:
+                st.warning("⚠️ Email already registered.")
+                return
+            if new_password != confirm_password:
+                st.warning("⚠️ Passwords do not match.")
+                return
+            role = "admin" if new_email.lower() == "ogunbowaleadeola@gmail.com" else "user"
+            users[new_email] = {
+                "password": hash_password(new_password),
+                "role": role
+            }
+            save_users(users)
+            st.success("✅ Account created. Please sign in.")
+
+def check_auth_status():
+    return st.session_state.get("user", None)
 
 # ----------------------
 # 🚨 Alert Column Generator
 # ----------------------
 
 def generate_alert_column(df: pd.DataFrame) -> pd.Series:
-    """
-    Flags unreceived orders for alert display.
-    Returns a new Series with alert indicators (e.g., 🚨) where needed.
-    """
     alert_flags = []
-
     for _, row in df.iterrows():
         if pd.isna(row["DATE RECEIVED"]) or str(row["DATE RECEIVED"]).strip() == "":
             alert_flags.append("🚨 Not received")
         else:
-            alert_flags.append("")  # No alert
-
+            alert_flags.append("")
     return pd.Series(alert_flags)
 
 # ----------------------
