@@ -225,3 +225,17 @@ def filter_unreceived_orders(df: pd.DataFrame) -> pd.DataFrame:
         df["DATE RECEIVED"].isna() |
         (df["DATE RECEIVED"].astype(str).str.strip() == "")
     ]
+# ----------------------
+# 🔐 Show Login Warning (Missing)
+# ----------------------
+def show_login_warning():
+    st.warning("🔒 Please log in to access this app.")
+
+# ----------------------
+# 🧪 Get User's Lab Name (Missing)
+# ----------------------
+def get_user_lab(email: str) -> str:
+    """Return the lab name based on the email."""
+    if email.lower() == "ogunbowaleadeola@gmail.com":
+        return "Adelaiye-Ogala Lab"
+    return "General Lab"
