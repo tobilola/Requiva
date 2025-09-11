@@ -7,9 +7,6 @@ from typing import Tuple
 import pandas as pd
 import streamlit as st
 
-def show_login_warning():
-    st.warning("🔒 Please log in to access this app.")
-
 # ----------------------
 # 📌 Constants
 # ----------------------
@@ -175,7 +172,7 @@ def login_form():
             st.session_state["user"] = email
             st.session_state["role"] = users[email]["role"]
             st.success("✅ Login successful!")
-            st.experimental_rerun()
+            st.rerun()
 
     with tab2:
         with st.form("register_form"):
@@ -225,17 +222,19 @@ def filter_unreceived_orders(df: pd.DataFrame) -> pd.DataFrame:
         df["DATE RECEIVED"].isna() |
         (df["DATE RECEIVED"].astype(str).str.strip() == "")
     ]
-# ----------------------
-# 🔐 Show Login Warning (Missing)
-# ----------------------
-def show_login_warning():
-    st.warning("🔒 Please log in to access this app.")
 
 # ----------------------
-# 🧪 Get User's Lab Name (Missing)
+# 🧪 Get User's Lab Name
 # ----------------------
+
 def get_user_lab(email: str) -> str:
-    """Return the lab name based on the email."""
     if email.lower() == "ogunbowaleadeola@gmail.com":
         return "Adelaiye-Ogala Lab"
     return "General Lab"
+
+# ----------------------
+# 🔐 Show Login Warning
+# ----------------------
+
+def show_login_warning():
+    st.warning("🔒 Please log in to access this app.")
