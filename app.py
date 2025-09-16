@@ -22,6 +22,13 @@ from utils import (
     REQUIRED_COLUMNS,
 )
 
+# Utility: Ensure all required columns exist
+def _ensure_columns(df: pd.DataFrame) -> pd.DataFrame:
+    for col in REQUIRED_COLUMNS:
+        if col not in df.columns:
+            df[col] = ""
+    return df
+
 # 🚩 Streamlit layout setup
 st.set_page_config(page_title="Requiva — Smart Lab Order Intelligence", page_icon="🥚", layout="wide")
 
@@ -56,6 +63,7 @@ tab_new, tab_table, tab_analytics, tab_export = st.tabs(["➕ New Order", "📋 
 with tab_new:
     st.subheader("Create a New Order")
     df = load_orders()
+    df = _ensure_columns(df)
 
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -113,6 +121,7 @@ with tab_new:
 with tab_table:
     st.subheader("Orders Table")
     df = load_orders()
+    df = _ensure_columns(df)
     df = generate_alert_column(df)
 
     c1, c2, c3 = st.columns(3)
@@ -131,9 +140,9 @@ with tab_table:
     if po_source_filter != "All":
         filtered = filtered[filtered["PO SOURCE"] == po_source_filter]
 
-    # Ensure filtered is a DataFrame
     if isinstance(filtered, pd.Series):
         filtered = filtered.to_frame().T
+    filtered = _ensure_columns(filtered)
 
     display_columns = [col for col in ["REQ#", "ITEM", "VENDOR", "DATE ORDERED", "RECEIVED BY", "ALERT"] if col in filtered.columns]
     st.dataframe(filtered[display_columns], use_container_width=True)
@@ -148,6 +157,7 @@ with tab_table:
 with tab_analytics:
     st.subheader("Top Items by Frequency")
     df = load_orders()
+    df = _ensure_columns(df)
     if not df.empty and "ITEM" in df.columns:
         counts = df["ITEM"].value_counts().head(10)
         fig, ax = plt.subplots(figsize=(8, 4))
@@ -163,9 +173,9 @@ with tab_analytics:
 with tab_export:
     st.subheader("Download Orders")
     df = load_orders()
+    df = _ensure_columns(df)
     df = df[[col for col in REQUIRED_COLUMNS if col in df.columns]]
 
-    # CSV Export
     csv_bytes = df.to_csv(index=False).encode("utf-8")
     st.download_button(
         label="Download CSV",
@@ -174,7 +184,6 @@ with tab_export:
         mime="text/csv",
     )
 
-    # Excel Export
     output = BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         df.to_excel(writer, sheet_name="Orders", index=False)
