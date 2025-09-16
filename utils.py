@@ -42,7 +42,6 @@ def _init_firestore_from_file():
             firebase_admin.initialize_app(cred)
 
         return firestore.client()
-
     except Exception as e:
         st.warning(f"⚠️ Firebase init failed. Using CSV.\n\nDetails: {e}")
         return None
@@ -205,19 +204,17 @@ def check_auth_status():
 # ----------------------
 
 def generate_alert_column(df: pd.DataFrame) -> pd.Series:
-    alert_flags = []
-    for _, row in df.iterrows():
-        if pd.isna(row["DATE RECEIVED"]) or str(row["DATE RECEIVED"]).strip() == "":
-            alert_flags.append("🚨 Not received")
-        else:
-            alert_flags.append("")
-    return pd.Series(alert_flags)
+    if "DATE RECEIVED" not in df.columns:
+        return pd.Series([""] * len(df))
+    return df["DATE RECEIVED"].apply(lambda x: "🚨 Not received" if pd.isna(x) or str(x).strip() == "" else "")
 
 # ----------------------
 # 🔍 Unreceived Order Filter
 # ----------------------
 
 def filter_unreceived_orders(df: pd.DataFrame) -> pd.DataFrame:
+    if "DATE RECEIVED" not in df.columns:
+        return pd.DataFrame()
     return df[
         df["DATE RECEIVED"].isna() |
         (df["DATE RECEIVED"].astype(str).str.strip() == "")
@@ -238,3 +235,4 @@ def get_user_lab(email: str) -> str:
 
 def show_login_warning():
     st.warning("🔒 Please log in to access this app.")
+
