@@ -1,8 +1,16 @@
+# 🚀 Full `utils.py` (with Forgot Password email support)
+
+```python
+# utils.py
 import os
 import json
 import hashlib
+import smtplib
+import secrets
+import string
 from datetime import datetime
 from typing import Tuple
+from email.message import EmailMessage
 
 import pandas as pd
 import streamlit as st
@@ -21,6 +29,12 @@ REQUIRED_COLUMNS = [
 USERS_FILE = "data/users.json"
 DATA_PATH = os.getenv("REQUIVA_DATA_PATH", "data/orders.csv")
 FIREBASE_CREDENTIAL_PATH = "/etc/secrets/firebase-service-account.json"
+RESET_TOKEN_FILE = "data/reset_tokens.json"
+
+EMAIL_USER = st.secrets["email_user"]
+EMAIL_PASS = st.secrets["email_pass"]
+SMTP_SERVER = st.secrets["smtp_server"]
+SMTP_PORT = int(st.secrets["smtp_port"])
 
 # ----------------------
 # 🔐 Firebase Setup
@@ -150,78 +164,63 @@ def save_users(users):
 def is_admin(email: str) -> bool:
     return email.lower() == "ogunbowaleadeola@gmail.com"
 
-def login_form():
-    st.subheader("🔐 Sign In to Requiva")
-    tab1, tab2 = st.tabs(["🔐 Sign In", "🆕 Create Account"])
+def generate_token(length=32):
+    return ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(length))
 
-    with tab1:
-        with st.form("login_form"):
-            email = st.text_input("Email")
-            password = st.text_input("Password", type="password")
-            submit = st.form_submit_button("Sign In")
+def load_reset_tokens():
+    if not os.path.exists(RESET_TOKEN_FILE):
+        return {}
+    with open(RESET_TOKEN_FILE, "r") as f:
+        return json.load(f)
 
-        if submit:
-            users = load_users()
-            if email not in users:
-                st.error("❌ Account not found.")
-                return
-            if users[email]["password"] != hash_password(password):
-                st.error("❌ Incorrect password.")
-                return
-            st.session_state["user"] = email
-            st.session_state["role"] = users[email]["role"]
-            st.success("✅ Login successful!")
-            st.rerun()
+def save_reset_tokens(tokens):
+    os.makedirs(os.path.dirname(RESET_TOKEN_FILE), exist_ok=True)
+    with open(RESET_TOKEN_FILE, "w") as f:
+        json.dump(tokens, f, indent=2)
 
-    with tab2:
-        with st.form("register_form"):
-            new_email = st.text_input("New Email")
-            new_password = st.text_input("New Password", type="password")
-            confirm_password = st.text_input("Confirm Password", type="password")
-            create = st.form_submit_button("Create Account")
+def send_password_reset_email(recipient_email: str, reset_token: str):
+    try:
+        msg = EmailMessage()
+        msg["Subject"] = "🔐 Requiva Password Reset"
+        msg["From"] = EMAIL_USER
+        msg["To"] = recipient_email
 
-        if create:
-            users = load_users()
-            if new_email in users:
-                st.warning("⚠️ Email already registered.")
-                return
-            if new_password != confirm_password:
-                st.warning("⚠️ Passwords do not match.")
-                return
-            role = "admin" if new_email.lower() == "ogunbowaleadeola@gmail.com" else "user"
-            users[new_email] = {
-                "password": hash_password(new_password),
-                "role": role
-            }
-            save_users(users)
-            st.success("✅ Account created. Please sign in.")
+        reset_link = f"https://requiva.app/reset?token={reset_token}"
+        msg.set_content(
+            f"Hi there,\n\nWe received a request to reset your Requiva password.\n"
+            f"Use the following token: {reset_token}\n\n"
+            f"Or click this link: {reset_link}\n\n"
+            f"This token is valid for 30 minutes.\n\nIf you didn't request this, you can ignore this message."
+        )
 
-def check_auth_status():
-    return st.session_state.get("user", None)
+        with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT) as smtp:
+            smtp.login(EMAIL_USER, EMAIL_PASS)
+            smtp.send_message(msg)
+    except Exception as e:
+        st.error(f"🚨 Email failed: {e}")
 
 # ----------------------
-# 🚨 Alert Column Generator
-# ----------------------
-
-def generate_alert_column(df: pd.DataFrame) -> pd.Series:
-    if "DATE RECEIVED" not in df.columns:
-        return pd.Series([""] * len(df))
-    return df["DATE RECEIVED"].apply(lambda x: "🚨 Not received" if pd.isna(x) or str(x).strip() == "" else "")
-
-# ----------------------
-# 🔍 Unreceived Order Filter
+# 🔍 Unreceived Orders
 # ----------------------
 
 def filter_unreceived_orders(df: pd.DataFrame) -> pd.DataFrame:
-    if "DATE RECEIVED" not in df.columns:
-        return pd.DataFrame()
-    return df[
-        df["DATE RECEIVED"].isna() |
-        (df["DATE RECEIVED"].astype(str).str.strip() == "")
-    ]
+    return df[df["DATE RECEIVED"].isna() | (df["DATE RECEIVED"].astype(str).str.strip() == "")]
 
 # ----------------------
-# 🧪 Get User's Lab Name
+# 🚨 Alert Column
+# ----------------------
+
+def generate_alert_column(df: pd.DataFrame) -> pd.Series:
+    alert_flags = []
+    for _, row in df.iterrows():
+        if pd.isna(row["DATE RECEIVED"]) or str(row["DATE RECEIVED"]).strip() == "":
+            alert_flags.append("🚨 Not received")
+        else:
+            alert_flags.append("")
+    return pd.Series(alert_flags)
+
+# ----------------------
+# 🧪 Get Lab Name
 # ----------------------
 
 def get_user_lab(email: str) -> str:
@@ -230,9 +229,14 @@ def get_user_lab(email: str) -> str:
     return "General Lab"
 
 # ----------------------
-# 🔐 Show Login Warning
+# 🔒 Login Status Check
 # ----------------------
+
+def check_auth_status():
+    return st.session_state.get("user", None)
 
 def show_login_warning():
     st.warning("🔒 Please log in to access this app.")
+```
 
+---
