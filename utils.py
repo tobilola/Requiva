@@ -1,240 +1,189 @@
-# 🚀 Full `utils.py` (with Forgot Password email support)
-
-# utils.py
-import os
-import json
-import hashlib
-import smtplib
-import secrets
-import string
-from datetime import datetime
-from typing import Tuple
-from email.message import EmailMessage
+from datetime import date, datetime
+from io import BytesIO
 
 import pandas as pd
 import streamlit as st
+import matplotlib.pyplot as plt
 
-# ----------------------
-# 📌 Constants
-# ----------------------
-
-REQUIRED_COLUMNS = [
-    "REQ#", "ITEM", "NUMBER OF ITEM", "AMOUNT PER ITEM", "TOTAL",
-    "VENDOR", "CAT #", "GRANT USED", "PO SOURCE", "PO #",
-    "NOTES", "ORDERED BY", "DATE ORDERED", "DATE RECEIVED",
-    "RECEIVED BY", "LOCATION KEPT", "REQUESTED BY", "TIME RECEIVED"
-]
-
-USERS_FILE = "data/users.json"
-DATA_PATH = os.getenv("REQUIVA_DATA_PATH", "data/orders.csv")
-FIREBASE_CREDENTIAL_PATH = "/etc/secrets/firebase-service-account.json"
-RESET_TOKEN_FILE = "data/reset_tokens.json"
-
-EMAIL_USER = st.secrets["email_user"]
-EMAIL_PASS = st.secrets["email_pass"]
-SMTP_SERVER = st.secrets["smtp_server"]
-SMTP_PORT = int(st.secrets["smtp_port"])
-
-# ----------------------
-# 🔐 Firebase Setup
-# ----------------------
-
-def _init_firestore_from_file():
-    if not os.path.exists(FIREBASE_CREDENTIAL_PATH):
-        st.warning("⚠️ Firebase service account file not found. Using local CSV.")
-        return None
-    try:
-        import firebase_admin
-        from firebase_admin import credentials, firestore
-
-        with open(FIREBASE_CREDENTIAL_PATH, "r") as f:
-            sa_info = json.load(f)
-        cred = credentials.Certificate(sa_info)
-
-        if not firebase_admin._apps:
-            firebase_admin.initialize_app(cred)
-
-        return firestore.client()
-    except Exception as e:
-        st.warning(f"⚠️ Firebase init failed. Using CSV.\n\nDetails: {e}")
-        return None
-
-db = _init_firestore_from_file()
-USE_FIRESTORE = db is not None
-
-# ----------------------
-# 📦 Data Functions
-# ----------------------
-
-def ensure_data_file():
-    os.makedirs(os.path.dirname(DATA_PATH), exist_ok=True)
-    if not os.path.exists(DATA_PATH):
-        pd.DataFrame(columns=REQUIRED_COLUMNS).to_csv(DATA_PATH, index=False)
+from utils import (
+    check_auth_status,
+    login_form,
+    show_login_warning,
+    is_admin,
+    get_user_lab,
+    generate_alert_column,
+    filter_unreceived_orders,
+    USE_FIRESTORE,
+    load_orders,
+    save_orders,
+    gen_req_id,
+    compute_total,
+    validate_order,
+    REQUIRED_COLUMNS,
+)
 
 def _ensure_columns(df: pd.DataFrame) -> pd.DataFrame:
     for col in REQUIRED_COLUMNS:
         if col not in df.columns:
-            df[col] = None
-    return df[REQUIRED_COLUMNS]
+            df[col] = ""
+    return df
 
-def load_orders() -> pd.DataFrame:
-    if USE_FIRESTORE and db:
-        docs = db.collection("requiva_orders").stream()
-        rows = [d.to_dict() for d in docs]
-        df = pd.DataFrame(rows)
-        return _ensure_columns(df) if not df.empty else pd.DataFrame(columns=REQUIRED_COLUMNS)
-    else:
-        ensure_data_file()
-        df = pd.read_csv(DATA_PATH)
-        return _ensure_columns(df)
+# Streamlit layout
+st.set_page_config(page_title="Requiva — Smart Lab Order Intelligence", page_icon="🥚", layout="wide")
 
-def save_orders(df: pd.DataFrame):
-    df = _ensure_columns(df.copy())
-    if USE_FIRESTORE and db:
-        from google.cloud import firestore as _fs
-        batch = db.batch()
-        col_ref = db.collection("requiva_orders")
-        for _, row in df.iterrows():
-            req_id = str(row["REQ#"])
-            if not req_id or req_id.lower() == "nan":
-                continue
-            doc = {k: (None if pd.isna(v) else v) for k, v in row.to_dict().items()}
-            batch.set(col_ref.document(req_id), doc, merge=True)
-        batch.commit()
-    else:
-        os.makedirs(os.path.dirname(DATA_PATH), exist_ok=True)
-        df.to_csv(DATA_PATH, index=False)
+# Authentication
+user_email = check_auth_status()
+if not user_email:
+    login_form()
+    show_login_warning()
+    st.stop()
 
-# ----------------------
-# 🧮 Utility Functions
-# ----------------------
+# Lab info
+lab_name = get_user_lab(user_email)
+st.sidebar.success(f"🔬 Lab: {lab_name}")
+st.sidebar.markdown(f"👤 Logged in as: `{user_email}`")
+if is_admin(user_email):
+    st.sidebar.info("🛠 Admin privileges enabled")
 
-def gen_req_id(df: pd.DataFrame) -> str:
-    year = datetime.now().strftime("%Y")
-    prefix = f"REQ-{year}-"
-    existing = df["REQ#"].dropna().astype(str).tolist()
-    nums = [int(x.split("-")[-1]) for x in existing if x.startswith(prefix) and x.split("-")[-1].isdigit()]
-    next_num = (max(nums) + 1) if nums else 1
-    return f"{prefix}{next_num:04d}"
+# Backend status
+st.write("Backend:", "Firestore ✅" if USE_FIRESTORE else "CSV (dev) ⚠️")
+st.title("Requiva — Smart Lab Order Intelligence")
 
-def compute_total(qty: float, unit_price: float) -> float:
-    try:
-        return round(float(qty) * float(unit_price), 2)
-    except Exception:
-        return 0.0
+# Tabs
+tab_new, tab_table, tab_analytics, tab_export = st.tabs(["➕ New Order", "📋 Orders", "📈 Analytics", "⬇️ Export"])
 
-def validate_order(item: str, qty, price, vendor: str) -> Tuple[bool, str]:
-    if not item or str(item).strip() == "":
-        return False, "ITEM is required."
-    try:
-        q = float(qty)
-        if q < 0:
-            return False, "NUMBER OF ITEM must be >= 0."
-    except Exception:
-        return False, "NUMBER OF ITEM must be a number."
-    try:
-        p = float(price)
-        if p < 0:
-            return False, "AMOUNT PER ITEM must be >= 0."
-    except Exception:
-        return False, "AMOUNT PER ITEM must be a number."
-    if not vendor or str(vendor).strip() == "":
-        return False, "VENDOR is required."
-    return True, ""
+# ➕ NEW ORDER TAB
+with tab_new:
+    st.subheader("Create a New Order")
+    df = load_orders()
+    df = _ensure_columns(df)
 
-# ----------------------
-# 🔐 Auth (Email/Password with Role)
-# ----------------------
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        item = st.text_input("ITEM *")
+        vendor = st.text_input("VENDOR *")
+        cat_no = st.text_input("CAT #")
+        grant_used = st.text_input("GRANT USED")
 
-def hash_password(password: str) -> str:
-    return hashlib.sha256(password.encode()).hexdigest()
+    with col2:
+        qty = st.number_input("NUMBER OF ITEM *", min_value=0.0, value=0.0, step=1.0)
+        unit_price = st.number_input("AMOUNT PER ITEM *", min_value=0.0, value=0.0, step=1.0, format="%.2f")
+        po_source = st.selectbox("PO SOURCE", ["ShopBlue", "Stock Room", "External Vendor"], index=0)
+        po_no = st.text_input("PO #")
 
-def load_users():
-    if not os.path.exists(USERS_FILE):
-        return {}
-    with open(USERS_FILE, "r") as f:
-        return json.load(f)
+    with col3:
+        notes = st.text_area("NOTES")
+        ordered_by = st.text_input("ORDERED BY")
+        date_ordered = st.date_input("DATE ORDERED", value=date.today())
+        received_flag = st.checkbox("Item received?")
+        date_received = st.date_input("DATE RECEIVED", value=date.today()) if received_flag else None
+        received_by = st.text_input("RECEIVED BY") if received_flag else ""
+        location = st.text_input("ITEM LOCATION") if received_flag else ""
 
-def save_users(users):
-    os.makedirs(os.path.dirname(USERS_FILE), exist_ok=True)
-    with open(USERS_FILE, "w") as f:
-        json.dump(users, f, indent=2)
-
-def is_admin(email: str) -> bool:
-    return email.lower() == "ogunbowaleadeola@gmail.com"
-
-def generate_token(length=32):
-    return ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(length))
-
-def load_reset_tokens():
-    if not os.path.exists(RESET_TOKEN_FILE):
-        return {}
-    with open(RESET_TOKEN_FILE, "r") as f:
-        return json.load(f)
-
-def save_reset_tokens(tokens):
-    os.makedirs(os.path.dirname(RESET_TOKEN_FILE), exist_ok=True)
-    with open(RESET_TOKEN_FILE, "w") as f:
-        json.dump(tokens, f, indent=2)
-
-def send_password_reset_email(recipient_email: str, reset_token: str):
-    try:
-        msg = EmailMessage()
-        msg["Subject"] = "🔐 Requiva Password Reset"
-        msg["From"] = EMAIL_USER
-        msg["To"] = recipient_email
-
-        reset_link = f"https://requiva.app/reset?token={reset_token}"
-        msg.set_content(
-            f"Hi there,\n\nWe received a request to reset your Requiva password.\n"
-            f"Use the following token: {reset_token}\n\n"
-            f"Or click this link: {reset_link}\n\n"
-            f"This token is valid for 30 minutes.\n\nIf you didn't request this, you can ignore this message."
-        )
-
-        with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT) as smtp:
-            smtp.login(EMAIL_USER, EMAIL_PASS)
-            smtp.send_message(msg)
-    except Exception as e:
-        st.error(f"🚨 Email failed: {e}")
-
-# ----------------------
-# 🔍 Unreceived Orders
-# ----------------------
-
-def filter_unreceived_orders(df: pd.DataFrame) -> pd.DataFrame:
-    return df[df["DATE RECEIVED"].isna() | (df["DATE RECEIVED"].astype(str).str.strip() == "")]
-
-# ----------------------
-# 🚨 Alert Column
-# ----------------------
-
-def generate_alert_column(df: pd.DataFrame) -> pd.Series:
-    alert_flags = []
-    for _, row in df.iterrows():
-        if pd.isna(row["DATE RECEIVED"]) or str(row["DATE RECEIVED"]).strip() == "":
-            alert_flags.append("🚨 Not received")
+    if st.button("Add Order", type="primary"):
+        ok, msg = validate_order(item, qty, unit_price, vendor)
+        if not ok:
+            st.error(msg)
         else:
-            alert_flags.append("")
-    return pd.Series(alert_flags)
+            req_id = gen_req_id(df)
+            total = compute_total(qty, unit_price)
+            new_row = {
+                "REQ#": req_id,
+                "ITEM": item,
+                "NUMBER OF ITEM": qty,
+                "AMOUNT PER ITEM": unit_price,
+                "TOTAL": total,
+                "VENDOR": vendor,
+                "CAT #": cat_no,
+                "GRANT USED": grant_used,
+                "PO SOURCE": po_source,
+                "PO #": po_no,
+                "NOTES": notes,
+                "ORDERED BY": ordered_by,
+                "DATE ORDERED": date_ordered.isoformat(),
+                "DATE RECEIVED": date_received.isoformat() if received_flag else "",
+                "RECEIVED BY": received_by,
+                "ITEM LOCATION": location,
+            }
+            df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+            save_orders(df)
+            st.success(f"Order {req_id} added.")
 
-# ----------------------
-# 🧪 Get Lab Name
-# ----------------------
+# 📋 ORDERS TABLE
+with tab_table:
+    st.subheader("Orders Table")
+    df = load_orders()
+    df = _ensure_columns(df)
+    df = generate_alert_column(df)
 
-def get_user_lab(email: str) -> str:
-    if email.lower() == "ogunbowaleadeola@gmail.com":
-        return "Adelaiye-Ogala Lab"
-    return "General Lab"
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        vendor_filter = st.text_input("Filter by VENDOR")
+    with c2:
+        grant_filter = st.text_input("Filter by GRANT USED")
+    with c3:
+        po_source_filter = st.selectbox("Filter by PO SOURCE", ["All", "ShopBlue", "Stock Room", "External Vendor"])
 
-# ----------------------
-# 🔒 Login Status Check
-# ----------------------
+    filtered = df.copy()
+    if vendor_filter:
+        filtered = filtered[filtered["VENDOR"].astype(str).str.contains(vendor_filter, case=False, na=False)]
+    if grant_filter:
+        filtered = filtered[filtered["GRANT USED"].astype(str).str.contains(grant_filter, case=False, na=False)]
+    if po_source_filter != "All":
+        filtered = filtered[filtered["PO SOURCE"] == po_source_filter]
 
-def check_auth_status():
-    return st.session_state.get("user", None)
+    if isinstance(filtered, pd.Series):
+        filtered = filtered.to_frame().T
+    filtered = _ensure_columns(filtered)
 
-def show_login_warning():
-    st.warning("🔒 Please log in to access this app.")
+    display_columns = [col for col in ["REQ#", "ITEM", "VENDOR", "DATE ORDERED", "RECEIVED BY", "ALERT"] if col in filtered.columns]
+    st.dataframe(filtered[display_columns], use_container_width=True)
 
----
+    overdue = filter_unreceived_orders(filtered)
+    if not overdue.empty:
+        st.warning(f"⚠️ {len(overdue)} items pending receipt — follow up needed.")
+    else:
+        st.success("✅ All recent items have been marked as received.")
+
+# 📈 ANALYTICS TAB
+with tab_analytics:
+    st.subheader("Top Items by Frequency")
+    df = load_orders()
+    df = _ensure_columns(df)
+    if not df.empty and "ITEM" in df.columns:
+        counts = df["ITEM"].value_counts().head(10)
+        fig, ax = plt.subplots(figsize=(8, 4))
+        counts.plot(kind="bar", ax=ax)
+        ax.set_title("Top 10 Ordered Items")
+        st.pyplot(fig)
+    else:
+        st.info("No data yet. Add some orders to see analytics.")
+
+# ⬇️ EXPORT TAB
+with tab_export:
+    st.subheader("Download Orders")
+    df = load_orders()
+    df = _ensure_columns(df)
+
+    csv_bytes = df.to_csv(index=False).encode("utf-8")
+    st.download_button(
+        label="Download CSV",
+        data=csv_bytes,
+        file_name=f"Requiva_Orders_{datetime.now().strftime('%Y%m%d')}.csv",
+        mime="text/csv",
+    )
+
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        df.to_excel(writer, sheet_name="Orders", index=False)
+    st.download_button(
+        label="Download Excel",
+        data=output.getvalue(),
+        file_name=f"Requiva_Orders_{datetime.now().strftime('%Y%m%d')}.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+# Footer
+st.markdown("---")
+st.caption("Requiva MVP • Export includes all locked fields for grant and audit readiness.")
+st.caption("Powered by TOBI HealthOps AI")
