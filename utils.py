@@ -236,6 +236,5 @@ def check_auth_status():
 
 def show_login_warning():
     st.warning("🔒 Please log in to access this app.")
-```
 
 ---
