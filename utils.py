@@ -4,163 +4,173 @@ import hashlib
 import json
 import os
 from datetime import datetime
-from typing import Tuple
+from firebase_admin import credentials, firestore, initialize_app
 
-# 🔐 Backend toggle
-USE_FIRESTORE = os.getenv("USE_FIRESTORE", "False").lower() == "true"
+# 🔐 Firestore/Firebase setup
+FIREBASE_JSON = os.getenv("FIREBASE_JSON")
+USE_FIRESTORE = bool(FIREBASE_JSON)
 
-# 🔥 Optional Firebase setup
-if USE_FIRESTORE:
-    import firebase_admin
-    from firebase_admin import credentials, firestore
-
-    if not firebase_admin._apps:
-        cred_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "firebase_secrets.json")
-        if os.path.exists(cred_path):
-            cred = credentials.Certificate(cred_path)
-            firebase_admin.initialize_app(cred)
-        else:
-            st.error("Missing Firebase credentials")
-            st.stop()
-
+if USE_FIRESTORE and not firestore._apps:
+    cred_dict = json.loads(FIREBASE_JSON)
+    cred = credentials.Certificate(cred_dict)
+    initialize_app(cred)
     db = firestore.client()
+else:
+    db = None
 
-# 📌 Global Constants
+# 📌 Required Fields
 REQUIRED_COLUMNS = [
-    "REQ#", "ITEM", "NUMBER OF ITEM", "AMOUNT PER ITEM", "TOTAL", "VENDOR",
-    "CAT #", "GRANT USED", "PO SOURCE", "PO #", "NOTES", "ORDERED BY",
-    "DATE ORDERED", "DATE RECEIVED", "RECEIVED BY", "ITEM LOCATION"
+    "REQ#", "ITEM", "NUMBER OF ITEM", "AMOUNT PER ITEM", "TOTAL",
+    "VENDOR", "CAT #", "GRANT USED", "PO SOURCE", "PO #", "NOTES",
+    "ORDERED BY", "DATE ORDERED", "DATE RECEIVED", "RECEIVED BY", "ITEM LOCATION"
 ]
 
-USERS_DB = "users.json"
-ORDERS_CSV = "orders.csv"
-
-# 📥 User session auth
-def hash_password(password: str) -> str:
+# 🔒 Password hashing
+def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
-def get_users():
-    if os.path.exists(USERS_DB):
-        with open(USERS_DB, "r") as f:
-            return json.load(f)
-    return {}
-
-def save_users(users):
-    with open(USERS_DB, "w") as f:
-        json.dump(users, f, indent=2)
-
+# ✅ Auth check
 def check_auth_status():
-    return st.session_state.get("authenticated_user")
+    return st.session_state.get("auth_user", None)
 
-def login_form():
-    st.sidebar.subheader("🔐 Login or Create Account")
-    users = get_users()
-    email = st.sidebar.text_input("Email (must be @buffalo.edu)", key="login_email")
-    password = st.sidebar.text_input("Password", type="password", key="login_pw")
+# 🔑 Admin check (Ogunbowale only)
+def is_admin(email):
+    return email == "ogunbowaleadeola@gmail.com"
 
-    if st.sidebar.button("Login"):
-        if not email.endswith("@buffalo.edu"):
-            st.sidebar.warning("Must use a @buffalo.edu email")
-            return
-        hashed = hash_password(password)
-        if email in users and users[email]["password"] == hashed:
-            st.session_state["authenticated_user"] = email
-            st.experimental_rerun()
-        else:
-            st.sidebar.error("Invalid credentials")
-
-    if st.sidebar.button("Create Account"):
-        if not email.endswith("@buffalo.edu"):
-            st.sidebar.warning("Only @buffalo.edu emails allowed")
-            return
-        if email in users:
-            st.sidebar.info("User already exists. Try logging in.")
-        else:
-            lab = st.sidebar.text_input("Lab Name", key="create_lab")
-            if lab:
-                users[email] = {
-                    "password": hash_password(password),
-                    "lab": lab,
-                    "role": "user"
-                }
-                save_users(users)
-                st.sidebar.success("Account created. Please log in.")
-            else:
-                st.sidebar.warning("Please enter a lab name.")
-
-    if st.sidebar.button("Forgot Password?"):
-        st.session_state["show_pw_reset"] = True
-
-def show_login_warning():
-    st.warning("Login required. Use the sidebar to log in.")
-
-# 🧪 Lab/Role
-def get_user_lab(email: str) -> str:
-    users = get_users()
-    return users.get(email, {}).get("lab", "Unknown")
-
-def is_admin(email: str) -> bool:
-    users = get_users()
-    return users.get(email, {}).get("role", "") == "admin"
-
-# 📥 Order Management
-def load_orders() -> pd.DataFrame:
-    if USE_FIRESTORE:
-        orders_ref = db.collection("orders")
-        docs = orders_ref.stream()
-        rows = []
-        for doc in docs:
-            rows.append(doc.to_dict())
-        return pd.DataFrame(rows)
+# 🧪 Multi-lab assignment
+def get_user_lab(email):
+    if is_admin(email):
+        return "Admin"
+    elif email.endswith("@buffalo.edu"):
+        return "Adelaiye-Ogala Lab"
     else:
-        if os.path.exists(ORDERS_CSV):
-            return pd.read_csv(ORDERS_CSV)
+        return email.split("@")[0].title() + " Lab"
+
+# 🧾 Account creation form
+def account_creation_form():
+    st.subheader("🆕 Create New Account")
+    email = st.text_input("New Email")
+    password = st.text_input("New Password", type="password")
+    confirm = st.text_input("Confirm Password", type="password")
+    if st.button("Create Account"):
+        if password != confirm:
+            st.error("Passwords do not match.")
+        elif USE_FIRESTORE:
+            user_ref = db.collection("users").document(email)
+            if user_ref.get().exists:
+                st.error("User already exists.")
+            else:
+                user_ref.set({"password": hash_password(password)})
+                st.success("Account created successfully.")
+        else:
+            st.info("Firestore not enabled. Running in test mode.")
+
+# 🔑 Password reset (manual request)
+def reset_password_request():
+    st.subheader("🔁 Password Reset Request")
+    email = st.text_input("Enter your registered email")
+    if st.button("Request Reset"):
+        if email.endswith("@buffalo.edu"):
+            st.success(f"A reset request has been sent to the admin for: {email}")
+        else:
+            st.warning("Password reset only supported for buffalo.edu users.")
+
+# 🔐 Login Form
+def login_form():
+    st.subheader("🔐 Login Required")
+    email = st.text_input("Email")
+    password = st.text_input("Password", type="password")
+    if st.button("Login"):
+        if USE_FIRESTORE:
+            user_ref = db.collection("users").document(email)
+            user = user_ref.get()
+            if user.exists and user.to_dict().get("password") == hash_password(password):
+                st.session_state.auth_user = email
+                st.success("Login successful.")
+                st.experimental_rerun()
+            else:
+                st.error("Invalid email or password.")
+        else:
+            if email == "test@lab.com" and password == "test":
+                st.session_state.auth_user = email
+                st.success("Test login successful.")
+                st.experimental_rerun()
+            else:
+                st.error("Invalid credentials (dev mode)")
+
+# ⚠️ Login warning
+def show_login_warning():
+    st.warning("Please log in to access Requiva.")
+
+# 🧾 Load orders
+ORDERS_CSV = "orders.csv"
+def load_orders():
+    if USE_FIRESTORE:
+        docs = db.collection("orders").stream()
+        data = [doc.to_dict() for doc in docs]
+        return pd.DataFrame(data)
+    elif os.path.exists(ORDERS_CSV):
+        return pd.read_csv(ORDERS_CSV)
+    else:
         return pd.DataFrame(columns=REQUIRED_COLUMNS)
 
-def save_orders(df: pd.DataFrame):
+# 💾 Save orders
+def save_orders(df):
+    df = df[REQUIRED_COLUMNS]
     if USE_FIRESTORE:
-        orders_ref = db.collection("orders")
+        batch = db.batch()
+        col_ref = db.collection("orders")
+        # Delete old
+        docs = col_ref.stream()
+        for doc in docs:
+            batch.delete(doc.reference)
+        batch.commit()
+        # Add new
         for _, row in df.iterrows():
-            doc_id = str(row["REQ#"])
-            orders_ref.document(doc_id).set(row.to_dict())
+            batch.set(col_ref.document(row["REQ#"]), row.to_dict())
+        batch.commit()
     else:
         df.to_csv(ORDERS_CSV, index=False)
 
-# 🧮 Utils
-def gen_req_id(df: pd.DataFrame) -> str:
-    existing = df["REQ#"].astype(str).tolist() if "REQ#" in df.columns else []
-    new_id = f"R{datetime.now().strftime('%Y%m%d%H%M%S')}"
-    while new_id in existing:
-        new_id = f"R{datetime.now().strftime('%Y%m%d%H%M%S')}"
-    return new_id
+# 🆔 Generate REQ ID
+def gen_req_id(df):
+    existing_ids = df["REQ#"].tolist() if "REQ#" in df.columns else []
+    base = datetime.now().strftime("REQ-%y%m%d")
+    suffix = 1
+    while f"{base}-{suffix:03d}" in existing_ids:
+        suffix += 1
+    return f"{base}-{suffix:03d}"
 
-def compute_total(qty: float, unit_price: float) -> float:
+# 💰 Total amount
+def compute_total(qty, unit_price):
     return round(qty * unit_price, 2)
 
-def validate_order(item, qty, unit_price, vendor) -> Tuple[bool, str]:
-    if not item:
-        return False, "Item name is required"
-    if qty <= 0:
-        return False, "Quantity must be > 0"
-    if unit_price <= 0:
-        return False, "Unit price must be > 0"
-    if not vendor:
-        return False, "Vendor is required"
-    return True, "Valid"
+# ✅ Order validation
+def validate_order(item, qty, unit_price, vendor):
+    if not item or qty <= 0 or unit_price <= 0 or not vendor:
+        return False, "All required fields (*) must be filled properly."
+    return True, "OK"
 
-def filter_unreceived_orders(df: pd.DataFrame) -> pd.DataFrame:
-    if "DATE RECEIVED" not in df.columns:
-        return pd.DataFrame()
-    return df[df["DATE RECEIVED"].isnull() | (df["DATE RECEIVED"] == "")]
-
-def generate_alert_column(df: pd.DataFrame) -> pd.DataFrame:
-    df["ALERT"] = ""
-    for idx, row in df.iterrows():
-        try:
-            ordered = pd.to_datetime(row.get("DATE ORDERED", ""))
-            received = row.get("DATE RECEIVED", "")
-            if not received and (datetime.now() - ordered).days > 10:
-                df.at[idx, "ALERT"] = "⏰ Overdue"
-        except Exception:
-            pass
+# 🚨 Alert column
+def generate_alert_column(df):
+    df = df.copy()
+    df["ALERT"] = df.apply(
+        lambda row: "✅" if pd.notna(row.get("DATE RECEIVED")) and row.get("DATE RECEIVED") != "" else "⚠️ Missing",
+        axis=1,
+    )
     return df
+
+# 🧼 Filter unreceived orders
+def filter_unreceived_orders(df):
+    df = df.copy()
+    if "DATE RECEIVED" in df.columns:
+        return df[df["DATE RECEIVED"].isna() | (df["DATE RECEIVED"] == "")]
+    return pd.DataFrame()
+
+# 🧪 Filter orders by lab
+def filter_by_lab(df, user_email):
+    if is_admin(user_email):
+        return df  # Admin sees all
+    lab_name = get_user_lab(user_email)
+    return df[df["ORDERED BY"].str.contains(lab_name, na=False)]
+
