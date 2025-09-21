@@ -20,6 +20,9 @@ from utils import (
     compute_total,
     validate_order,
     REQUIRED_COLUMNS,
+    create_account,
+    reset_password_request,
+    filter_by_lab,
 )
 
 # Utility: Ensure all required columns exist
@@ -36,6 +39,25 @@ st.set_page_config(page_title="Requiva — Smart Lab Order Intelligence", page_i
 user_email = check_auth_status()
 if not user_email:
     login_form()
+    st.info("Don't have an account? Create one below.")
+    with st.expander("🆕 Create Account"):
+        new_email = st.text_input("New Email")
+        new_password = st.text_input("New Password", type="password")
+        if st.button("Create Account"):
+            success, msg = create_account(new_email, new_password)
+            if success:
+                st.success(msg)
+            else:
+                st.error(msg)
+    st.info("Forgot password?")
+    with st.expander("🔁 Request Password Reset"):
+        reset_email = st.text_input("Your Email for Reset")
+        if st.button("Request Reset"):
+            success, msg = reset_password_request(reset_email)
+            if success:
+                st.success(msg)
+            else:
+                st.error(msg)
     show_login_warning()
     st.stop()
 
@@ -63,6 +85,7 @@ tab_new, tab_table, tab_analytics, tab_export = st.tabs(["➕ New Order", "📋 
 with tab_new:
     st.subheader("Create a New Order")
     df = load_orders()
+    df = filter_by_lab(df, user_email)
     df = _ensure_columns(df)
 
     col1, col2, col3 = st.columns(3)
@@ -112,6 +135,7 @@ with tab_new:
                 "DATE RECEIVED": date_received.isoformat() if date_received else "",
                 "RECEIVED BY": received_by,
                 "ITEM LOCATION": location,
+                "LAB": lab_name,
             }
             df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
             save_orders(df)
@@ -121,6 +145,7 @@ with tab_new:
 with tab_table:
     st.subheader("Orders Table")
     df = load_orders()
+    df = filter_by_lab(df, user_email)
     df = _ensure_columns(df)
     df = generate_alert_column(df)
 
@@ -157,6 +182,7 @@ with tab_table:
 with tab_analytics:
     st.subheader("Top Items by Frequency")
     df = load_orders()
+    df = filter_by_lab(df, user_email)
     df = _ensure_columns(df)
     if not df.empty and "ITEM" in df.columns:
         counts = df["ITEM"].value_counts().head(10)
@@ -173,6 +199,7 @@ with tab_analytics:
 with tab_export:
     st.subheader("Download Orders")
     df = load_orders()
+    df = filter_by_lab(df, user_email)
     df = _ensure_columns(df)
     df = df[[col for col in REQUIRED_COLUMNS if col in df.columns]]
 
@@ -198,3 +225,4 @@ with tab_export:
 st.markdown("---")
 st.caption("Requiva MVP • Export includes all locked fields for grant and audit readiness.")
 st.caption("Powered by TOBI HealthOps AI")
+
