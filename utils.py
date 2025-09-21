@@ -1,189 +1,166 @@
-from datetime import date, datetime
-from io import BytesIO
-
-import pandas as pd
 import streamlit as st
-import matplotlib.pyplot as plt
+import pandas as pd
+import hashlib
+import json
+import os
+from datetime import datetime
+from typing import Tuple
 
-from utils import (
-    check_auth_status,
-    login_form,
-    show_login_warning,
-    is_admin,
-    get_user_lab,
-    generate_alert_column,
-    filter_unreceived_orders,
-    USE_FIRESTORE,
-    load_orders,
-    save_orders,
-    gen_req_id,
-    compute_total,
-    validate_order,
-    REQUIRED_COLUMNS,
-)
+# 🔐 Backend toggle
+USE_FIRESTORE = os.getenv("USE_FIRESTORE", "False").lower() == "true"
 
-def _ensure_columns(df: pd.DataFrame) -> pd.DataFrame:
-    for col in REQUIRED_COLUMNS:
-        if col not in df.columns:
-            df[col] = ""
-    return df
+# 🔥 Optional Firebase setup
+if USE_FIRESTORE:
+    import firebase_admin
+    from firebase_admin import credentials, firestore
 
-# Streamlit layout
-st.set_page_config(page_title="Requiva — Smart Lab Order Intelligence", page_icon="🥚", layout="wide")
-
-# Authentication
-user_email = check_auth_status()
-if not user_email:
-    login_form()
-    show_login_warning()
-    st.stop()
-
-# Lab info
-lab_name = get_user_lab(user_email)
-st.sidebar.success(f"🔬 Lab: {lab_name}")
-st.sidebar.markdown(f"👤 Logged in as: `{user_email}`")
-if is_admin(user_email):
-    st.sidebar.info("🛠 Admin privileges enabled")
-
-# Backend status
-st.write("Backend:", "Firestore ✅" if USE_FIRESTORE else "CSV (dev) ⚠️")
-st.title("Requiva — Smart Lab Order Intelligence")
-
-# Tabs
-tab_new, tab_table, tab_analytics, tab_export = st.tabs(["➕ New Order", "📋 Orders", "📈 Analytics", "⬇️ Export"])
-
-# ➕ NEW ORDER TAB
-with tab_new:
-    st.subheader("Create a New Order")
-    df = load_orders()
-    df = _ensure_columns(df)
-
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        item = st.text_input("ITEM *")
-        vendor = st.text_input("VENDOR *")
-        cat_no = st.text_input("CAT #")
-        grant_used = st.text_input("GRANT USED")
-
-    with col2:
-        qty = st.number_input("NUMBER OF ITEM *", min_value=0.0, value=0.0, step=1.0)
-        unit_price = st.number_input("AMOUNT PER ITEM *", min_value=0.0, value=0.0, step=1.0, format="%.2f")
-        po_source = st.selectbox("PO SOURCE", ["ShopBlue", "Stock Room", "External Vendor"], index=0)
-        po_no = st.text_input("PO #")
-
-    with col3:
-        notes = st.text_area("NOTES")
-        ordered_by = st.text_input("ORDERED BY")
-        date_ordered = st.date_input("DATE ORDERED", value=date.today())
-        received_flag = st.checkbox("Item received?")
-        date_received = st.date_input("DATE RECEIVED", value=date.today()) if received_flag else None
-        received_by = st.text_input("RECEIVED BY") if received_flag else ""
-        location = st.text_input("ITEM LOCATION") if received_flag else ""
-
-    if st.button("Add Order", type="primary"):
-        ok, msg = validate_order(item, qty, unit_price, vendor)
-        if not ok:
-            st.error(msg)
+    if not firebase_admin._apps:
+        cred_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "firebase_secrets.json")
+        if os.path.exists(cred_path):
+            cred = credentials.Certificate(cred_path)
+            firebase_admin.initialize_app(cred)
         else:
-            req_id = gen_req_id(df)
-            total = compute_total(qty, unit_price)
-            new_row = {
-                "REQ#": req_id,
-                "ITEM": item,
-                "NUMBER OF ITEM": qty,
-                "AMOUNT PER ITEM": unit_price,
-                "TOTAL": total,
-                "VENDOR": vendor,
-                "CAT #": cat_no,
-                "GRANT USED": grant_used,
-                "PO SOURCE": po_source,
-                "PO #": po_no,
-                "NOTES": notes,
-                "ORDERED BY": ordered_by,
-                "DATE ORDERED": date_ordered.isoformat(),
-                "DATE RECEIVED": date_received.isoformat() if received_flag else "",
-                "RECEIVED BY": received_by,
-                "ITEM LOCATION": location,
-            }
-            df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
-            save_orders(df)
-            st.success(f"Order {req_id} added.")
+            st.error("Missing Firebase credentials")
+            st.stop()
 
-# 📋 ORDERS TABLE
-with tab_table:
-    st.subheader("Orders Table")
-    df = load_orders()
-    df = _ensure_columns(df)
-    df = generate_alert_column(df)
+    db = firestore.client()
 
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        vendor_filter = st.text_input("Filter by VENDOR")
-    with c2:
-        grant_filter = st.text_input("Filter by GRANT USED")
-    with c3:
-        po_source_filter = st.selectbox("Filter by PO SOURCE", ["All", "ShopBlue", "Stock Room", "External Vendor"])
+# 📌 Global Constants
+REQUIRED_COLUMNS = [
+    "REQ#", "ITEM", "NUMBER OF ITEM", "AMOUNT PER ITEM", "TOTAL", "VENDOR",
+    "CAT #", "GRANT USED", "PO SOURCE", "PO #", "NOTES", "ORDERED BY",
+    "DATE ORDERED", "DATE RECEIVED", "RECEIVED BY", "ITEM LOCATION"
+]
 
-    filtered = df.copy()
-    if vendor_filter:
-        filtered = filtered[filtered["VENDOR"].astype(str).str.contains(vendor_filter, case=False, na=False)]
-    if grant_filter:
-        filtered = filtered[filtered["GRANT USED"].astype(str).str.contains(grant_filter, case=False, na=False)]
-    if po_source_filter != "All":
-        filtered = filtered[filtered["PO SOURCE"] == po_source_filter]
+USERS_DB = "users.json"
+ORDERS_CSV = "orders.csv"
 
-    if isinstance(filtered, pd.Series):
-        filtered = filtered.to_frame().T
-    filtered = _ensure_columns(filtered)
+# 📥 User session auth
+def hash_password(password: str) -> str:
+    return hashlib.sha256(password.encode()).hexdigest()
 
-    display_columns = [col for col in ["REQ#", "ITEM", "VENDOR", "DATE ORDERED", "RECEIVED BY", "ALERT"] if col in filtered.columns]
-    st.dataframe(filtered[display_columns], use_container_width=True)
+def get_users():
+    if os.path.exists(USERS_DB):
+        with open(USERS_DB, "r") as f:
+            return json.load(f)
+    return {}
 
-    overdue = filter_unreceived_orders(filtered)
-    if not overdue.empty:
-        st.warning(f"⚠️ {len(overdue)} items pending receipt — follow up needed.")
+def save_users(users):
+    with open(USERS_DB, "w") as f:
+        json.dump(users, f, indent=2)
+
+def check_auth_status():
+    return st.session_state.get("authenticated_user")
+
+def login_form():
+    st.sidebar.subheader("🔐 Login or Create Account")
+    users = get_users()
+    email = st.sidebar.text_input("Email (must be @buffalo.edu)", key="login_email")
+    password = st.sidebar.text_input("Password", type="password", key="login_pw")
+
+    if st.sidebar.button("Login"):
+        if not email.endswith("@buffalo.edu"):
+            st.sidebar.warning("Must use a @buffalo.edu email")
+            return
+        hashed = hash_password(password)
+        if email in users and users[email]["password"] == hashed:
+            st.session_state["authenticated_user"] = email
+            st.experimental_rerun()
+        else:
+            st.sidebar.error("Invalid credentials")
+
+    if st.sidebar.button("Create Account"):
+        if not email.endswith("@buffalo.edu"):
+            st.sidebar.warning("Only @buffalo.edu emails allowed")
+            return
+        if email in users:
+            st.sidebar.info("User already exists. Try logging in.")
+        else:
+            lab = st.sidebar.text_input("Lab Name", key="create_lab")
+            if lab:
+                users[email] = {
+                    "password": hash_password(password),
+                    "lab": lab,
+                    "role": "user"
+                }
+                save_users(users)
+                st.sidebar.success("Account created. Please log in.")
+            else:
+                st.sidebar.warning("Please enter a lab name.")
+
+    if st.sidebar.button("Forgot Password?"):
+        st.session_state["show_pw_reset"] = True
+
+def show_login_warning():
+    st.warning("Login required. Use the sidebar to log in.")
+
+# 🧪 Lab/Role
+def get_user_lab(email: str) -> str:
+    users = get_users()
+    return users.get(email, {}).get("lab", "Unknown")
+
+def is_admin(email: str) -> bool:
+    users = get_users()
+    return users.get(email, {}).get("role", "") == "admin"
+
+# 📥 Order Management
+def load_orders() -> pd.DataFrame:
+    if USE_FIRESTORE:
+        orders_ref = db.collection("orders")
+        docs = orders_ref.stream()
+        rows = []
+        for doc in docs:
+            rows.append(doc.to_dict())
+        return pd.DataFrame(rows)
     else:
-        st.success("✅ All recent items have been marked as received.")
+        if os.path.exists(ORDERS_CSV):
+            return pd.read_csv(ORDERS_CSV)
+        return pd.DataFrame(columns=REQUIRED_COLUMNS)
 
-# 📈 ANALYTICS TAB
-with tab_analytics:
-    st.subheader("Top Items by Frequency")
-    df = load_orders()
-    df = _ensure_columns(df)
-    if not df.empty and "ITEM" in df.columns:
-        counts = df["ITEM"].value_counts().head(10)
-        fig, ax = plt.subplots(figsize=(8, 4))
-        counts.plot(kind="bar", ax=ax)
-        ax.set_title("Top 10 Ordered Items")
-        st.pyplot(fig)
+def save_orders(df: pd.DataFrame):
+    if USE_FIRESTORE:
+        orders_ref = db.collection("orders")
+        for _, row in df.iterrows():
+            doc_id = str(row["REQ#"])
+            orders_ref.document(doc_id).set(row.to_dict())
     else:
-        st.info("No data yet. Add some orders to see analytics.")
+        df.to_csv(ORDERS_CSV, index=False)
 
-# ⬇️ EXPORT TAB
-with tab_export:
-    st.subheader("Download Orders")
-    df = load_orders()
-    df = _ensure_columns(df)
+# 🧮 Utils
+def gen_req_id(df: pd.DataFrame) -> str:
+    existing = df["REQ#"].astype(str).tolist() if "REQ#" in df.columns else []
+    new_id = f"R{datetime.now().strftime('%Y%m%d%H%M%S')}"
+    while new_id in existing:
+        new_id = f"R{datetime.now().strftime('%Y%m%d%H%M%S')}"
+    return new_id
 
-    csv_bytes = df.to_csv(index=False).encode("utf-8")
-    st.download_button(
-        label="Download CSV",
-        data=csv_bytes,
-        file_name=f"Requiva_Orders_{datetime.now().strftime('%Y%m%d')}.csv",
-        mime="text/csv",
-    )
+def compute_total(qty: float, unit_price: float) -> float:
+    return round(qty * unit_price, 2)
 
-    output = BytesIO()
-    with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        df.to_excel(writer, sheet_name="Orders", index=False)
-    st.download_button(
-        label="Download Excel",
-        data=output.getvalue(),
-        file_name=f"Requiva_Orders_{datetime.now().strftime('%Y%m%d')}.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    )
+def validate_order(item, qty, unit_price, vendor) -> Tuple[bool, str]:
+    if not item:
+        return False, "Item name is required"
+    if qty <= 0:
+        return False, "Quantity must be > 0"
+    if unit_price <= 0:
+        return False, "Unit price must be > 0"
+    if not vendor:
+        return False, "Vendor is required"
+    return True, "Valid"
 
-# Footer
-st.markdown("---")
-st.caption("Requiva MVP • Export includes all locked fields for grant and audit readiness.")
-st.caption("Powered by TOBI HealthOps AI")
+def filter_unreceived_orders(df: pd.DataFrame) -> pd.DataFrame:
+    if "DATE RECEIVED" not in df.columns:
+        return pd.DataFrame()
+    return df[df["DATE RECEIVED"].isnull() | (df["DATE RECEIVED"] == "")]
+
+def generate_alert_column(df: pd.DataFrame) -> pd.DataFrame:
+    df["ALERT"] = ""
+    for idx, row in df.iterrows():
+        try:
+            ordered = pd.to_datetime(row.get("DATE ORDERED", ""))
+            received = row.get("DATE RECEIVED", "")
+            if not received and (datetime.now() - ordered).days > 10:
+                df.at[idx, "ALERT"] = "⏰ Overdue"
+        except Exception:
+            pass
+    return df
