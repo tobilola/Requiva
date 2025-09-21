@@ -1,6 +1,5 @@
 # 🚀 Full `utils.py` (with Forgot Password email support)
 
-```python
 # utils.py
 import os
 import json
