@@ -173,3 +173,26 @@ def filter_by_lab(df, user_email):
         return df  # Admin sees all
     lab_name = get_user_lab(user_email)
     return df[df["ORDERED BY"].str.contains(lab_name, na=False)]
+# 🧑‍💻 Create Account
+def create_account(email: str, password: str, lab: str = None):
+    if not email or not password:
+        return False
+    hashed = hash_password(password)
+    user_data = {
+        "password": hashed,
+        "role": "admin" if email == "ogunbowaleadeola@gmail.com" else "user",
+        "lab": lab or get_user_lab(email)
+    }
+    if USE_FIRESTORE:
+        db.collection("users").document(email).set(user_data)
+    else:
+        users_file = "data/users.json"
+        os.makedirs(os.path.dirname(users_file), exist_ok=True)
+        users = {}
+        if os.path.exists(users_file):
+            with open(users_file, "r") as f:
+                users = json.load(f)
+        users[email] = user_data
+        with open(users_file, "w") as f:
+            json.dump(users, f, indent=2)
+    return True
