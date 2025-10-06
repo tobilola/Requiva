@@ -173,4 +173,3 @@ def filter_by_lab(df, user_email):
         return df  # Admin sees all
     lab_name = get_user_lab(user_email)
     return df[df["ORDERED BY"].str.contains(lab_name, na=False)]
-
