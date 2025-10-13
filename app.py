@@ -1,6 +1,5 @@
 from datetime import date, datetime
 from io import BytesIO
-
 import pandas as pd
 import streamlit as st
 import matplotlib.pyplot as plt
@@ -25,15 +24,12 @@ from utils import (
     filter_by_lab,
 )
 
-# Utility: Ensure all required columns exist
-def _ensure_columns(df: pd.DataFrame) -> pd.DataFrame:
-    for col in REQUIRED_COLUMNS:
-        if col not in df.columns:
-            df[col] = ""
-    return df
-
 # 🚩 Streamlit layout setup
 st.set_page_config(page_title="Requiva — Smart Lab Order Intelligence", page_icon="🥚", layout="wide")
+
+# 🚪 Ensure session keys exist
+if "auth_user" not in st.session_state:
+    st.session_state.auth_user = None
 
 # 🔐 Authentication
 user_email = check_auth_status()
@@ -47,8 +43,11 @@ if not user_email:
             success, msg = create_account(new_email, new_password)
             if success:
                 st.success(msg)
+                st.session_state.auth_user = new_email
+                st.experimental_rerun()
             else:
                 st.error(msg)
+
     st.info("Forgot password?")
     with st.expander("🔁 Request Password Reset"):
         reset_email = st.text_input("Your Email for Reset")
@@ -58,15 +57,21 @@ if not user_email:
                 st.success(msg)
             else:
                 st.error(msg)
+
     show_login_warning()
     st.stop()
 
-# 🧪 Lab & Role Info
+# 🔍 Sidebar Info
 lab_name = get_user_lab(user_email)
 st.sidebar.success(f"🔬 Lab: {lab_name}")
 st.sidebar.markdown(f"👤 Logged in as: `{user_email}`")
 if is_admin(user_email):
     st.sidebar.info("🛠 Admin privileges enabled")
+
+# 🚪 Logout
+if st.sidebar.button("Logout"):
+    st.session_state.auth_user = None
+    st.experimental_rerun()
 
 # 🔌 Backend Mode
 st.write("Backend:", "Firestore ✅" if USE_FIRESTORE else "CSV (dev) ⚠️")
@@ -86,7 +91,9 @@ with tab_new:
     st.subheader("Create a New Order")
     df = load_orders()
     df = filter_by_lab(df, user_email)
-    df = _ensure_columns(df)
+    for col in REQUIRED_COLUMNS:
+        if col not in df.columns:
+            df[col] = ""
 
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -146,7 +153,9 @@ with tab_table:
     st.subheader("Orders Table")
     df = load_orders()
     df = filter_by_lab(df, user_email)
-    df = _ensure_columns(df)
+    for col in REQUIRED_COLUMNS:
+        if col not in df.columns:
+            df[col] = ""
     df = generate_alert_column(df)
 
     c1, c2, c3 = st.columns(3)
@@ -165,10 +174,6 @@ with tab_table:
     if po_source_filter != "All":
         filtered = filtered[filtered["PO SOURCE"] == po_source_filter]
 
-    if isinstance(filtered, pd.Series):
-        filtered = filtered.to_frame().T
-    filtered = _ensure_columns(filtered)
-
     display_columns = [col for col in ["REQ#", "ITEM", "VENDOR", "DATE ORDERED", "RECEIVED BY", "ALERT"] if col in filtered.columns]
     st.dataframe(filtered[display_columns], use_container_width=True)
 
@@ -183,7 +188,10 @@ with tab_analytics:
     st.subheader("Top Items by Frequency")
     df = load_orders()
     df = filter_by_lab(df, user_email)
-    df = _ensure_columns(df)
+    for col in REQUIRED_COLUMNS:
+        if col not in df.columns:
+            df[col] = ""
+
     if not df.empty and "ITEM" in df.columns:
         counts = df["ITEM"].value_counts().head(10)
         fig, ax = plt.subplots(figsize=(8, 4))
@@ -200,7 +208,9 @@ with tab_export:
     st.subheader("Download Orders")
     df = load_orders()
     df = filter_by_lab(df, user_email)
-    df = _ensure_columns(df)
+    for col in REQUIRED_COLUMNS:
+        if col not in df.columns:
+            df[col] = ""
     df = df[[col for col in REQUIRED_COLUMNS if col in df.columns]]
 
     csv_bytes = df.to_csv(index=False).encode("utf-8")
@@ -225,4 +235,3 @@ with tab_export:
 st.markdown("---")
 st.caption("Requiva MVP • Export includes all locked fields for grant and audit readiness.")
 st.caption("Powered by TOBI HealthOps AI")
-
