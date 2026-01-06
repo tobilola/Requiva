@@ -45,24 +45,30 @@ def hash_password(password):
 def check_auth_status():
     return st.session_state.get("auth_user", None)
 
-# Admin check
+# Admin check - FIXED: Only your email is admin
 def is_admin(email):
     return email == "ogunbowaleadeola@gmail.com"
 
-# Multi-lab assignment
+# Multi-lab assignment - FIXED
 def get_user_lab(email):
+    """
+    Assign lab based on email domain.
+    Admin (ogunbowaleadeola@gmail.com) can see all labs.
+    Buffalo.edu users belong to Adelaiye-Ogala Lab.
+    """
     if is_admin(email):
         return "Admin"
     elif email.endswith("@buffalo.edu"):
         return "Adelaiye-Ogala Lab"
     else:
-        return email.split("@")[0].title() + " Lab"
+        # For other emails, create lab name from domain
+        domain = email.split("@")[1].split(".")[0]
+        return f"{domain.title()} Lab"
 
-# Login Form - FIXED
+# Login Form
 def login_form():
-    st.subheader("🔐 Login Required")
+    st.subheader("Login Required")
     
-    # Use a form to prevent automatic reruns
     with st.form("login_form"):
         email = st.text_input("Email")
         password = st.text_input("Password", type="password")
@@ -75,24 +81,24 @@ def login_form():
                     user = user_ref.get()
                     if user.exists and user.to_dict().get("password") == hash_password(password):
                         st.session_state.auth_user = email
-                        st.success("Login successful!")
+                        st.success("Login successful")
                         st.rerun()
                     else:
-                        st.error("Invalid email or password.")
+                        st.error("Invalid email or password")
                 except Exception as e:
                     st.error(f"Login error: {e}")
             else:
                 # Dev mode
                 if email == "test@lab.com" and password == "test":
                     st.session_state.auth_user = email
-                    st.success("Test login successful.")
+                    st.success("Test login successful")
                     st.rerun()
                 else:
                     st.error("Invalid credentials (dev mode)")
 
 # Login warning
 def show_login_warning():
-    st.warning("Please log in to access Requiva.")
+    st.warning("Please log in to access Requiva")
 
 # Load orders
 ORDERS_CSV = "orders.csv"
@@ -112,7 +118,6 @@ def load_orders():
 
 # Save orders
 def save_orders(df):
-    # Ensure all required columns exist
     for col in REQUIRED_COLUMNS:
         if col not in df.columns:
             df[col] = ""
@@ -121,17 +126,14 @@ def save_orders(df):
     
     if USE_FIRESTORE and db:
         try:
-            # Use transaction for atomicity
             batch = db.batch()
             col_ref = db.collection("orders")
             
-            # Clear old orders
             docs = col_ref.stream()
             for doc in docs:
                 batch.delete(doc.reference)
             batch.commit()
             
-            # Add new orders
             batch = db.batch()
             for _, row in df.iterrows():
                 doc_ref = col_ref.document(str(row["REQ#"]))
@@ -158,14 +160,14 @@ def compute_total(qty, unit_price):
 # Order validation
 def validate_order(item, qty, unit_price, vendor):
     if not item or qty <= 0 or unit_price <= 0 or not vendor:
-        return False, "All required fields (*) must be filled properly."
+        return False, "All required fields (*) must be filled properly"
     return True, "OK"
 
 # Alert column
 def generate_alert_column(df):
     df = df.copy()
     df["ALERT"] = df.apply(
-        lambda row: "✅" if pd.notna(row.get("DATE RECEIVED")) and row.get("DATE RECEIVED") != "" else "⚠️ Missing",
+        lambda row: "Received" if pd.notna(row.get("DATE RECEIVED")) and row.get("DATE RECEIVED") != "" else "Pending",
         axis=1,
     )
     return df
@@ -177,19 +179,25 @@ def filter_unreceived_orders(df):
         return df[df["DATE RECEIVED"].isna() | (df["DATE RECEIVED"] == "")]
     return pd.DataFrame()
 
-# Filter orders by lab
+# Filter orders by lab - FIXED
 def filter_by_lab(df, user_email):
+    """
+    Admin sees all orders.
+    Regular users only see their lab's orders.
+    """
     if is_admin(user_email):
-        return df
+        return df  # Admin sees everything
+    
     lab_name = get_user_lab(user_email)
+    
     if "LAB" in df.columns:
         return df[df["LAB"] == lab_name]
     return df
     
-# Create account - FIXED
+# Create account
 def create_account(email: str, password: str, lab: str = None):
     if not email or not password:
-        return False, "Email and password are required."
+        return False, "Email and password are required"
 
     hashed = hash_password(password)
     user_data = {
@@ -202,7 +210,7 @@ def create_account(email: str, password: str, lab: str = None):
         if USE_FIRESTORE and db:
             user_ref = db.collection("users").document(email)
             if user_ref.get().exists:
-                return False, "Account already exists."
+                return False, "Account already exists"
             user_ref.set(user_data)
         else:
             users_file = "data/users.json"
@@ -212,34 +220,33 @@ def create_account(email: str, password: str, lab: str = None):
                 with open(users_file, "r") as f:
                     users = json.load(f)
             if email in users:
-                return False, "Account already exists."
+                return False, "Account already exists"
             users[email] = user_data
             with open(users_file, "w") as f:
                 json.dump(users, f, indent=2)
-        return True, "Account created successfully."
+        return True, "Account created successfully"
     except Exception as e:
         return False, f"Error creating account: {e}"
 
-# Password reset - FIXED
+# Password reset
 def reset_password_request(email: str):
     if not email:
-        return False, "Email is required."
+        return False, "Email is required"
     
     try:
         if USE_FIRESTORE and db:
             user_ref = db.collection("users").document(email)
             if not user_ref.get().exists:
-                return False, "Account not found."
+                return False, "Account not found"
             
-            # Store reset request
             reset_ref = db.collection("password_resets").document(email)
             reset_ref.set({
                 "email": email,
                 "requested_at": datetime.now().isoformat(),
                 "status": "pending"
             })
-            return True, "Password reset request submitted. Admin will contact you."
+            return True, "Password reset request submitted. Admin will contact you"
         else:
-            return True, "Password reset request submitted (dev mode)."
+            return True, "Password reset request submitted (dev mode)"
     except Exception as e:
         return False, f"Error: {e}"
