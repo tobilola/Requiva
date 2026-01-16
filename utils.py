@@ -13,7 +13,12 @@ except ImportError:
     FIREBASE_AVAILABLE = False
 
 # Firestore/Firebase setup
-FIREBASE_JSON = os.getenv("FIREBASE_JSON") or st.secrets.get("firebase", {}).get("service_account_json")
+FIREBASE_JSON = (
+    os.getenv("FIREBASE_JSON") or 
+    os.getenv("firebase-service-account.json") or  # Add this line
+    st.secrets.get("firebase", {}).get("service_account_json")
+)
+
 USE_FIRESTORE = bool(FIREBASE_JSON) and FIREBASE_AVAILABLE
 
 if USE_FIRESTORE:
