@@ -12,14 +12,9 @@ try:
 except ImportError:
     FIREBASE_AVAILABLE = False
 
-# ==========================================
-# FIREBASE SETUP - IMPROVED
-# ==========================================
-
-# Try multiple environment variable names for flexibility
 FIREBASE_JSON = (
     os.getenv("FIREBASE_JSON") or 
-    os.getenv("firebase-service-account.json") or  # Old name
+    os.getenv("firebase-service-account.json") or
     os.getenv("FIREBASE_CREDENTIALS") or 
     st.secrets.get("firebase", {}).get("service_account_json")
 )
@@ -49,49 +44,27 @@ else:
     else:
         print("⚠️ Firebase Admin SDK not installed. Using CSV mode.")
 
-# ==========================================
-# REQUIRED COLUMNS
-# ==========================================
-
 REQUIRED_COLUMNS = [
     "REQ#", "ITEM", "NUMBER OF ITEM", "AMOUNT PER ITEM", "TOTAL",
     "VENDOR", "CAT #", "GRANT USED", "PO SOURCE", "PO #", "NOTES",
     "ORDERED BY", "DATE ORDERED", "DATE RECEIVED", "RECEIVED BY", "ITEM LOCATION", "LAB"
 ]
 
-# ==========================================
-# PASSWORD HASHING
-# ==========================================
-
 def hash_password(password):
-    """Hash password using SHA256"""
     return hashlib.sha256(password.encode()).hexdigest()
 
-# ==========================================
-# AUTHENTICATION FUNCTIONS
-# ==========================================
-
 def check_auth_status():
-    """Check if user is authenticated"""
     return st.session_state.get("auth_user", None)
 
 def is_admin(email):
-    """Check if email belongs to admin"""
     return email == "ogunbowaleadeola@gmail.com"
 
 def get_user_lab(email):
-    """
-    Assign lab based on email domain.
-    Admin can see all labs.
-    Buffalo.edu users belong to Adelaiye-Ogala Lab.
-    Others get lab name from domain.
-    """
     if is_admin(email):
         return "Admin"
     elif email.endswith("@buffalo.edu"):
         return "Adelaiye-Ogala Lab"
     else:
-        # Extract lab name from email domain
         try:
             domain = email.split("@")[1].split(".")[0]
             return f"{domain.title()} Lab"
@@ -99,10 +72,8 @@ def get_user_lab(email):
             return "Unknown Lab"
 
 def login_form():
-    """Display login form and handle authentication"""
     st.subheader("🔐 Login to Requiva")
     
-    # Show connection status
     if USE_FIRESTORE:
         st.success("✅ Connected to Firestore")
     else:
@@ -130,9 +101,7 @@ def login_form():
                 st.error("❌ Please enter both email and password")
                 return
             
-            # Try authentication
             if USE_FIRESTORE and db:
-                # Firestore authentication
                 try:
                     user_ref = db.collection("users").document(email)
                     user = user_ref.get()
@@ -156,10 +125,9 @@ def login_form():
                     st.error(f"❌ Login error: {e}")
                     st.error("Check if Firebase is properly configured on Render")
             else:
-                # Development mode - hardcoded test credentials
                 DEV_USERS = {
                     "test@lab.com": "test",
-                    "ogunbowaleadeola@gmail.com": "admin123"  # Temporary dev access
+                    "ogunbowaleadeola@gmail.com": "admin123"
                 }
                 
                 if email in DEV_USERS and DEV_USERS[email] == password:
@@ -172,24 +140,17 @@ def login_form():
                     st.warning("⚠️ Add FIREBASE_JSON environment variable on Render to enable Firestore")
 
 def show_login_warning():
-    """Show warning to login"""
     st.warning("🔒 Please log in to access Requiva Lab Management System")
-
-# ==========================================
-# ORDER MANAGEMENT
-# ==========================================
 
 ORDERS_CSV = "orders.csv"
 
 def load_orders():
-    """Load orders from Firestore or CSV"""
     if USE_FIRESTORE and db:
         try:
             docs = db.collection("orders").stream()
             data = [doc.to_dict() for doc in docs]
             df = pd.DataFrame(data)
             
-            # Ensure all required columns exist
             for col in REQUIRED_COLUMNS:
                 if col not in df.columns:
                     df[col] = ""
@@ -204,7 +165,6 @@ def load_orders():
         try:
             df = pd.read_csv(ORDERS_CSV)
             
-            # Ensure all required columns exist
             for col in REQUIRED_COLUMNS:
                 if col not in df.columns:
                     df[col] = ""
@@ -215,22 +175,17 @@ def load_orders():
             st.error(f"Error loading orders from CSV: {e}")
             return pd.DataFrame(columns=REQUIRED_COLUMNS)
     else:
-        # No data exists yet
         return pd.DataFrame(columns=REQUIRED_COLUMNS)
 
 def save_orders(df):
-    """Save orders to Firestore or CSV"""
-    # Ensure all required columns exist
     for col in REQUIRED_COLUMNS:
         if col not in df.columns:
             df[col] = ""
     
-    # Keep only required columns
     df = df[REQUIRED_COLUMNS]
     
     if USE_FIRESTORE and db:
         try:
-            # Clear existing orders
             batch = db.batch()
             col_ref = db.collection("orders")
             
@@ -239,7 +194,6 @@ def save_orders(df):
                 batch.delete(doc.reference)
             batch.commit()
             
-            # Add new orders
             batch = db.batch()
             for _, row in df.iterrows():
                 doc_ref = col_ref.document(str(row["REQ#"]))
@@ -250,10 +204,8 @@ def save_orders(df):
             
         except Exception as e:
             st.error(f"Error saving orders to Firestore: {e}")
-            # Fallback to CSV
             df.to_csv(ORDERS_CSV, index=False)
     else:
-        # Save to CSV
         try:
             df.to_csv(ORDERS_CSV, index=False)
             print(f"✅ Saved {len(df)} orders to CSV")
@@ -261,7 +213,6 @@ def save_orders(df):
             st.error(f"Error saving orders to CSV: {e}")
 
 def gen_req_id(df):
-    """Generate unique REQ ID"""
     existing_ids = df["REQ#"].tolist() if "REQ#" in df.columns and not df.empty else []
     base = datetime.now().strftime("REQ-%y%m%d")
     suffix = 1
@@ -272,11 +223,9 @@ def gen_req_id(df):
     return f"{base}-{suffix:03d}"
 
 def compute_total(qty, unit_price):
-    """Calculate total amount"""
     return round(qty * unit_price, 2)
 
 def validate_order(item, qty, unit_price, vendor):
-    """Validate order inputs"""
     if not item or not item.strip():
         return False, "Item name is required"
     
@@ -291,12 +240,7 @@ def validate_order(item, qty, unit_price, vendor):
     
     return True, "OK"
 
-# ==========================================
-# DATA FILTERING & DISPLAY
-# ==========================================
-
 def generate_alert_column(df):
-    """Add ALERT column showing order status"""
     df = df.copy()
     df["ALERT"] = df.apply(
         lambda row: "✅ Received" if pd.notna(row.get("DATE RECEIVED")) and row.get("DATE RECEIVED") != "" else "⏳ Pending",
@@ -305,23 +249,17 @@ def generate_alert_column(df):
     return df
 
 def filter_unreceived_orders(df):
-    """Filter orders that haven't been received yet"""
     df = df.copy()
     if "DATE RECEIVED" in df.columns:
         return df[df["DATE RECEIVED"].isna() | (df["DATE RECEIVED"] == "")]
     return pd.DataFrame()
 
 def filter_by_lab(df, user_email):
-    """
-    Filter orders by lab.
-    Admin sees all orders.
-    Regular users only see their lab's orders.
-    """
     if df.empty:
         return df
     
     if is_admin(user_email):
-        return df  # Admin sees everything
+        return df
     
     lab_name = get_user_lab(user_email)
     
@@ -330,19 +268,13 @@ def filter_by_lab(df, user_email):
     
     return df
 
-# ==========================================
-# ACCOUNT MANAGEMENT
-# ==========================================
-
 def create_account(email: str, password: str, lab: str = None):
-    """Create new user account"""
     if not email or not email.strip():
         return False, "Email is required"
     
     if not password or len(password) < 6:
         return False, "Password must be at least 6 characters"
     
-    # Validate email format
     if "@" not in email or "." not in email.split("@")[1]:
         return False, "Invalid email format"
     
@@ -356,17 +288,14 @@ def create_account(email: str, password: str, lab: str = None):
 
     try:
         if USE_FIRESTORE and db:
-            # Check if user already exists
             user_ref = db.collection("users").document(email)
             if user_ref.get().exists:
                 return False, "Account already exists. Try logging in or reset your password."
             
-            # Create new user
             user_ref.set(user_data)
             return True, "Account created successfully! You can now login."
             
         else:
-            # Save to local JSON file
             users_file = "data/users.json"
             os.makedirs(os.path.dirname(users_file), exist_ok=True)
             
@@ -389,18 +318,15 @@ def create_account(email: str, password: str, lab: str = None):
         return False, f"Error creating account: {e}"
 
 def reset_password_request(email: str):
-    """Request password reset"""
     if not email or not email.strip():
         return False, "Email is required"
     
     try:
         if USE_FIRESTORE and db:
-            # Check if user exists
             user_ref = db.collection("users").document(email)
             if not user_ref.get().exists:
                 return False, "Email not found. Please check your email or create a new account."
             
-            # Create password reset request
             reset_ref = db.collection("password_resets").document(email)
             reset_ref.set({
                 "email": email,
@@ -415,12 +341,7 @@ def reset_password_request(email: str):
     except Exception as e:
         return False, f"Error requesting password reset: {e}"
 
-# ==========================================
-# UTILITY FUNCTIONS
-# ==========================================
-
 def get_firebase_status():
-    """Get detailed Firebase connection status"""
     status = {
         "firebase_available": FIREBASE_AVAILABLE,
         "use_firestore": USE_FIRESTORE,
