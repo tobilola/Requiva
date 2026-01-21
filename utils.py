@@ -34,31 +34,31 @@ if USE_FIRESTORE:
             cred = credentials.Certificate(cred_dict)
             initialize_app(cred)
         db = firestore.client()
-        print("✅ Firebase initialized successfully")
+        print("Firebase initialized successfully")
     except json.JSONDecodeError as e:
-        print(f"❌ Firebase JSON parsing error: {e}")
+        print(f"Firebase JSON parsing error: {e}")
         USE_FIRESTORE = False
         db = None
     except Exception as e:
-        print(f"❌ Firebase initialization failed: {e}")
+        print(f"Firebase initialization failed: {e}")
         USE_FIRESTORE = False
         db = None
 else:
     db = None
     if FIREBASE_AVAILABLE:
-        print("⚠️ Firebase credentials not found. Using CSV mode.")
+        print("Firebase credentials not found. Using CSV mode.")
     else:
-        print("⚠️ Firebase Admin SDK not installed. Using CSV mode.")
+        print("Firebase Admin SDK not installed. Using CSV mode.")
 
 # Email Configuration
-EMAIL_ADDRESS = os.getenv("EMAIL_ADDRESS")  # Your Gmail address
-EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")  # Gmail App Password
+EMAIL_ADDRESS = os.getenv("EMAIL_ADDRESS")
+EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
 EMAIL_ENABLED = bool(EMAIL_ADDRESS and EMAIL_PASSWORD)
 
 if EMAIL_ENABLED:
-    print("✅ Email sending enabled")
+    print("Email sending enabled")
 else:
-    print("⚠️ Email not configured. Set EMAIL_ADDRESS and EMAIL_PASSWORD env variables.")
+    print("Email not configured. Set EMAIL_ADDRESS and EMAIL_PASSWORD env variables.")
 
 # Admin Configuration
 ADMIN_EMAIL = "ogunbowaleadeola@gmail.com"
@@ -115,19 +115,16 @@ def send_email(to_email, subject, body_html, body_text=None):
     try:
         msg = MIMEMultipart('alternative')
         msg['Subject'] = subject
-        msg['From'] = f"Requiva Lab System <{EMAIL_ADDRESS}>"
+        msg['From'] = f"Requiva <{EMAIL_ADDRESS}>"
         msg['To'] = to_email
         
-        # Plain text version
         if body_text:
             part1 = MIMEText(body_text, 'plain')
             msg.attach(part1)
         
-        # HTML version
         part2 = MIMEText(body_html, 'html')
         msg.attach(part2)
         
-        # Connect to Gmail SMTP
         with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
             server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
             server.sendmail(EMAIL_ADDRESS, to_email, msg.as_string())
@@ -141,18 +138,19 @@ def send_email(to_email, subject, body_html, body_text=None):
 
 def send_password_reset_email(to_email, temp_password):
     """Send password reset email with temporary password"""
-    subject = "🔬 Requiva - Password Reset"
+    subject = "Requiva - Password Reset"
     
     body_html = f"""
     <html>
     <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <div style="background-color: #1e3a5f; color: white; padding: 20px; text-align: center;">
-            <h1>🔬 Requiva Lab System</h1>
+            <h1>Requiva</h1>
+            <p>Lab Order Management System</p>
         </div>
         <div style="padding: 30px; background-color: #f9f9f9;">
             <h2>Password Reset Request</h2>
             <p>Hello,</p>
-            <p>We received a request to reset your password for the Requiva Lab Management System.</p>
+            <p>We received a request to reset your password for Requiva.</p>
             <p>Your temporary password is:</p>
             <div style="background-color: #e8f4f8; padding: 15px; border-radius: 5px; text-align: center; margin: 20px 0;">
                 <code style="font-size: 24px; font-weight: bold; color: #1e3a5f;">{temp_password}</code>
@@ -163,18 +161,17 @@ def send_password_reset_email(to_email, temp_password):
                 <li>We recommend changing your password after logging in</li>
                 <li>If you didn't request this reset, please contact the admin</li>
             </ul>
-            <p>Best regards,<br>Requiva Lab System</p>
+            <p>Best regards,<br>Requiva System</p>
         </div>
         <div style="background-color: #eee; padding: 15px; text-align: center; font-size: 12px; color: #666;">
             <p>Adelaiye-Ogala Lab | University at Buffalo</p>
-            <p>This is an automated message. Please do not reply.</p>
         </div>
     </body>
     </html>
     """
     
     body_text = f"""
-    Requiva Lab System - Password Reset
+    Requiva - Password Reset
     
     Hello,
     
@@ -187,7 +184,7 @@ def send_password_reset_email(to_email, temp_password):
     If you didn't request this reset, please contact the admin.
     
     Best regards,
-    Requiva Lab System
+    Requiva System
     Adelaiye-Ogala Lab | University at Buffalo
     """
     
@@ -195,30 +192,30 @@ def send_password_reset_email(to_email, temp_password):
 
 def send_welcome_email(to_email, lab_name):
     """Send welcome email to new users"""
-    subject = "🔬 Welcome to Requiva Lab System!"
+    subject = "Welcome to Requiva"
     
     body_html = f"""
     <html>
     <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <div style="background-color: #1e3a5f; color: white; padding: 20px; text-align: center;">
-            <h1>🔬 Welcome to Requiva!</h1>
+            <h1>Welcome to Requiva</h1>
         </div>
         <div style="padding: 30px; background-color: #f9f9f9;">
-            <h2>Account Created Successfully</h2>
+            <h2>Account Created</h2>
             <p>Hello,</p>
-            <p>Your account has been created for the Requiva Lab Management System.</p>
+            <p>Your account has been created for Requiva.</p>
             <div style="background-color: #e8f4f8; padding: 15px; border-radius: 5px; margin: 20px 0;">
                 <p><strong>Email:</strong> {to_email}</p>
                 <p><strong>Lab:</strong> {lab_name}</p>
             </div>
             <p>You can now:</p>
             <ul>
-                <li>📝 Create and track lab orders</li>
-                <li>📊 View analytics and spending reports</li>
-                <li>🤖 Get ML-powered insights and predictions</li>
-                <li>💾 Export data for reporting</li>
+                <li>Create and track lab orders</li>
+                <li>Import orders from ShopBlue</li>
+                <li>View analytics and spending reports</li>
+                <li>Export data for reporting</li>
             </ul>
-            <p>Best regards,<br>Requiva Lab System</p>
+            <p>Best regards,<br>Requiva System</p>
         </div>
         <div style="background-color: #eee; padding: 15px; text-align: center; font-size: 12px; color: #666;">
             <p>Adelaiye-Ogala Lab | University at Buffalo</p>
@@ -230,12 +227,12 @@ def send_welcome_email(to_email, lab_name):
     return send_email(to_email, subject, body_html)
 
 def login_form():
-    st.subheader("🔐 Login to Requiva")
+    st.subheader("Login")
     
     if USE_FIRESTORE:
-        st.success("✅ Connected to Firestore")
+        st.caption("Connected to Firestore")
     else:
-        st.warning("⚠️ Running in development mode (CSV storage)")
+        st.warning("Running in development mode (CSV storage)")
     
     with st.form("login_form", clear_on_submit=False):
         email = st.text_input(
@@ -252,11 +249,11 @@ def login_form():
         
         col1, col2 = st.columns([1, 3])
         with col1:
-            submitted = st.form_submit_button("🔓 Login", type="primary", use_container_width=True)
+            submitted = st.form_submit_button("Login", type="primary", use_container_width=True)
         
         if submitted:
             if not email or not password:
-                st.error("❌ Please enter both email and password")
+                st.error("Please enter both email and password")
                 return
             
             email = email.strip().lower()
@@ -264,7 +261,7 @@ def login_form():
             if USE_FIRESTORE and db:
                 try:
                     user_ref = db.collection("users").document(email)
-                    user = user_ref.get(timeout=10)  # 10 second timeout
+                    user = user_ref.get(timeout=10)
                     
                     if user.exists:
                         user_data = user.to_dict()
@@ -272,21 +269,20 @@ def login_form():
                         
                         if stored_password == hash_password(password):
                             st.session_state.auth_user = email
-                            st.success("✅ Login successful!")
+                            st.success("Login successful")
                             st.rerun()
                         else:
-                            st.error("❌ Invalid password")
-                            st.info("💡 Use 'Request Password Reset' if you forgot your password")
+                            st.error("Invalid password")
+                            st.info("Use 'Request Password Reset' if you forgot your password")
                     else:
-                        st.error("❌ Email not found")
-                        st.info("💡 Create a new account below if you don't have one")
+                        st.error("Email not found")
+                        st.info("Create a new account if you don't have one")
                         
                 except Exception as e:
-                    st.error(f"❌ Login error: Connection timed out or failed")
-                    st.info("🔄 Please try again. If the problem persists, check your internet connection.")
+                    st.error("Login error: Connection timed out or failed")
+                    st.info("Please try again. If the problem persists, check your internet connection.")
                     print(f"Login error details: {e}")
             else:
-                # Development mode
                 DEV_USERS = {
                     "test@buffalo.edu": "test123",
                     "ogunbowaleadeola@gmail.com": "admin123"
@@ -294,15 +290,14 @@ def login_form():
                 
                 if email in DEV_USERS and DEV_USERS[email] == password:
                     st.session_state.auth_user = email
-                    st.success("✅ Test login successful (Development Mode)")
+                    st.success("Test login successful (Development Mode)")
                     st.rerun()
                 else:
-                    st.error("❌ Invalid credentials (Development Mode)")
-                    st.info("💡 Development credentials: test@buffalo.edu / test123")
-                    st.warning("⚠️ Add FIREBASE_JSON environment variable on Render to enable Firestore")
+                    st.error("Invalid credentials (Development Mode)")
+                    st.info("Development credentials: test@buffalo.edu / test123")
 
 def show_login_warning():
-    st.warning("🔒 Please log in to access Requiva Lab Management System")
+    st.warning("Please log in to access Requiva")
 
 ORDERS_CSV = "orders.csv"
 
@@ -362,7 +357,7 @@ def save_orders(df):
                 batch.set(doc_ref, row.to_dict())
             batch.commit()
             
-            print(f"✅ Saved {len(df)} orders to Firestore")
+            print(f"Saved {len(df)} orders to Firestore")
             
         except Exception as e:
             st.error(f"Error saving orders to Firestore: {e}")
@@ -370,7 +365,7 @@ def save_orders(df):
     else:
         try:
             df.to_csv(ORDERS_CSV, index=False)
-            print(f"✅ Saved {len(df)} orders to CSV")
+            print(f"Saved {len(df)} orders to CSV")
         except Exception as e:
             st.error(f"Error saving orders to CSV: {e}")
 
@@ -405,7 +400,7 @@ def validate_order(item, qty, unit_price, vendor):
 def generate_alert_column(df):
     df = df.copy()
     df["ALERT"] = df.apply(
-        lambda row: "✅ Received" if pd.notna(row.get("DATE RECEIVED")) and row.get("DATE RECEIVED") != "" else "⏳ Pending",
+        lambda row: "Received" if pd.notna(row.get("DATE RECEIVED")) and row.get("DATE RECEIVED") != "" else "Pending",
         axis=1,
     )
     return df
@@ -442,7 +437,6 @@ def create_account(email: str, password: str, lab: str = None):
     if "@" not in email or "." not in email.split("@")[1]:
         return False, "Invalid email format"
     
-    # Check if email is allowed
     if not is_allowed_email(email):
         return False, f"Registration is restricted to @{ALLOWED_DOMAIN} emails. Contact admin for access."
     
@@ -464,14 +458,13 @@ def create_account(email: str, password: str, lab: str = None):
             
             user_ref.set(user_data)
             
-            # Send welcome email (non-blocking - don't fail if email fails)
             if EMAIL_ENABLED:
                 try:
                     send_welcome_email(email, lab_name)
                 except:
-                    pass  # Don't fail account creation if email fails
+                    pass
             
-            return True, "Account created successfully! You can now login."
+            return True, "Account created successfully. You can now login."
             
         else:
             users_file = "data/users.json"
@@ -509,32 +502,26 @@ def reset_password_request(email: str):
             if not user_doc.exists:
                 return False, "Email not found. Please check your email or create a new account."
             
-            # Generate temporary password
             temp_password = generate_temp_password()
             hashed_temp = hash_password(temp_password)
             
-            # Update user's password in Firestore
             user_ref.update({
                 "password": hashed_temp,
                 "password_reset_at": datetime.now().isoformat(),
-                "temp_password": True  # Flag to indicate temp password
+                "temp_password": True
             })
             
-            # Send email with temporary password
             if EMAIL_ENABLED:
                 success, msg = send_password_reset_email(email, temp_password)
                 if success:
-                    return True, f"✅ Password reset email sent to {email}. Check your inbox (and spam folder)."
+                    return True, f"Password reset email sent to {email}. Check your inbox (and spam folder)."
                 else:
-                    # Revert password change if email fails
                     user_data = user_doc.to_dict()
                     user_ref.update({"password": user_data.get("password")})
                     return False, f"Failed to send email: {msg}"
             else:
-                # Email not configured - show temp password on screen (less secure)
-                return True, f"✅ Your temporary password is: **{temp_password}**\n\nUse this to log in. (Email not configured)"
+                return True, f"Your temporary password is: **{temp_password}**\n\nUse this to log in. (Email not configured)"
         else:
-            # Development mode
             return True, "Password reset (Development Mode). Contact admin at ogunbowaleadeola@gmail.com"
             
     except Exception as e:
