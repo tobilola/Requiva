@@ -161,7 +161,7 @@ else:
 # Main Tabs
 tab_new, tab_import, tab_table, tab_analytics, tab_ml_insights, tab_export = st.tabs([
     "New Order", 
-    "Import from ShopBlue",
+    "Import Data",
     "Orders Table", 
     "Analytics", 
     "ML Insights",
@@ -332,92 +332,123 @@ with tab_new:
                 st.success(f"Order {req_id} added successfully. Total: ${total:,.2f}")
                 st.info("Refresh the Orders Table tab to see your new order")
 
-# TAB 2: Import from ShopBlue
+# TAB 2: Import Data
 with tab_import:
-    st.subheader("Import from ShopBlue")
-    st.markdown("Upload your ShopBlue export to quickly import purchase orders.")
+    st.subheader("Import Orders")
     
-    st.markdown("""
-    **How to export from ShopBlue:**
-    1. Log into ShopBlue
-    2. Click user icon (top right) → Manage Searches
-    3. Navigate to Shared → UB - ShopBlue Support
-    4. Click Export on "Purchase Orders Completed"
-    5. Download the Excel file and upload below
-    """)
+    import_type = st.radio(
+        "Select import source:",
+        ["ShopBlue Export", "Accounts & Expenses / Inventory File"],
+        horizontal=True
+    )
     
     st.markdown("---")
     
-    uploaded_file = st.file_uploader(
-        "Upload ShopBlue Export (.xlsx)", 
-        type=["xlsx"],
-        key="shopblue_upload"
-    )
-    
-    if uploaded_file is not None:
-        try:
-            # Read with header on row 9 (0-indexed: row 9)
-            df_import = pd.read_excel(uploaded_file, header=9)
-            
-            # Validate it's a ShopBlue export
-            expected_cols = ['PO Number', 'Supplier', 'Created Date/Time', 'Total Amount']
-            if not all(col in df_import.columns for col in expected_cols):
-                st.error("This doesn't appear to be a valid ShopBlue export. Please check the file.")
-            else:
-                st.success(f"Found {len(df_import)} purchase orders")
+    if import_type == "ShopBlue Export":
+        st.markdown("""
+        **How to export from ShopBlue:**
+        1. Log into ShopBlue
+        2. Click user icon (top right) → Manage Searches
+        3. Navigate to Shared → UB - ShopBlue Support
+        4. Click Export on "Purchase Orders Completed"
+        5. Download the Excel file and upload below
+        """)
+        
+        uploaded_file = st.file_uploader(
+            "Upload ShopBlue Export (.xlsx)", 
+            type=["xlsx"],
+            key="shopblue_upload"
+        )
+        
+        if uploaded_file is not None:
+            try:
+                df_import = pd.read_excel(uploaded_file, header=9)
                 
-                # Preview
-                st.markdown("**Preview:**")
-                preview_cols = ['PO Number', 'Supplier', 'Created Date/Time', 'PO Owner', 'Total Amount']
-                preview_cols = [c for c in preview_cols if c in df_import.columns]
-                st.dataframe(df_import[preview_cols].head(10), use_container_width=True)
-                
-                if len(df_import) > 10:
-                    st.caption(f"Showing 10 of {len(df_import)} records")
-                
-                st.markdown("---")
-                st.markdown("**Import Options**")
-                
-                # Let user select which POs to import
-                po_numbers = df_import['PO Number'].astype(str).tolist()
-                selected_pos = st.multiselect(
-                    "Select POs to import (leave empty for all)",
-                    options=po_numbers,
-                    default=[],
-                    key="select_pos"
-                )
-                
-                if not selected_pos:
-                    selected_pos = po_numbers
-                
-                st.write(f"Will import: {len(selected_pos)} purchase orders")
-                
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    if st.button("Import Selected POs", type="primary", use_container_width=True):
+                expected_cols = ['PO Number', 'Supplier', 'Created Date/Time', 'Total Amount']
+                if not all(col in df_import.columns for col in expected_cols):
+                    st.error("This doesn't appear to be a valid ShopBlue export. Please check the file.")
+                else:
+                    st.success(f"Found {len(df_import)} purchase orders")
+                    
+                    preview_cols = ['PO Number', 'Requisition Number', 'Supplier', 'Total Amount']
+                    preview_cols = [c for c in preview_cols if c in df_import.columns]
+                    st.dataframe(df_import[preview_cols].head(10), use_container_width=True)
+                    
+                    if len(df_import) > 10:
+                        st.caption(f"Showing 10 of {len(df_import)} records")
+                    
+                    # Load existing orders to check for duplicates
+                    df_orders = load_orders()
+                    existing_pos = set(df_orders['PO #'].astype(str).values) if 'PO #' in df_orders.columns else set()
+                    existing_reqs = set(df_orders['REQ#'].astype(str).str.replace('REQ-', '').values) if 'REQ#' in df_orders.columns else set()
+                    
+                    # Also check Requisition Numbers from ShopBlue
+                    if 'Requisition Number' in df_import.columns:
+                        shopblue_req_nums = df_import['Requisition Number'].astype(str).tolist()
+                        already_imported = [r for r in shopblue_req_nums if r in existing_reqs]
+                        if already_imported:
+                            st.warning(f"Found {len(already_imported)} orders that may already exist (by Requisition Number)")
+                    
+                    st.markdown("---")
+                    
+                    po_numbers = df_import['PO Number'].astype(str).tolist()
+                    selected_pos = st.multiselect(
+                        "Select POs to import (leave empty for all)",
+                        options=po_numbers,
+                        default=[],
+                        key="select_pos"
+                    )
+                    
+                    if not selected_pos:
+                        selected_pos = po_numbers
+                    
+                    st.write(f"Will import: {len(selected_pos)} purchase orders")
+                    
+                    if st.button("Import Selected POs", type="primary"):
                         df_orders = load_orders()
-                        df_orders = filter_by_lab(df_orders, user_email)
+                        
+                        # Build sets for duplicate checking
+                        existing_pos = set(df_orders['PO #'].astype(str).values) if not df_orders.empty and 'PO #' in df_orders.columns else set()
+                        existing_reqs = set()
+                        if not df_orders.empty and 'REQ#' in df_orders.columns:
+                            # Extract numeric part of REQ# for comparison
+                            for req in df_orders['REQ#'].astype(str).values:
+                                existing_reqs.add(req)
+                        
+                        # Also track Requisition Numbers stored in NOTES
+                        if not df_orders.empty and 'NOTES' in df_orders.columns:
+                            for note in df_orders['NOTES'].astype(str).values:
+                                if 'Requisition:' in note:
+                                    try:
+                                        req_num = note.split('Requisition:')[1].split('.')[0].strip()
+                                        existing_reqs.add(req_num)
+                                    except:
+                                        pass
                         
                         imported_count = 0
                         skipped_count = 0
+                        skipped_details = []
                         
                         for _, row in df_import.iterrows():
                             po_num = str(row.get('PO Number', ''))
+                            req_num = str(row.get('Requisition Number', ''))
                             
                             if po_num not in selected_pos:
                                 continue
                             
-                            # Check if PO already exists
-                            if not df_orders.empty and 'PO #' in df_orders.columns:
-                                if po_num in df_orders['PO #'].astype(str).values:
-                                    skipped_count += 1
-                                    continue
+                            # Check duplicates by PO # OR Requisition Number
+                            if po_num in existing_pos:
+                                skipped_count += 1
+                                skipped_details.append(f"PO {po_num} (duplicate PO#)")
+                                continue
                             
-                            # Create new entry
+                            if req_num in existing_reqs:
+                                skipped_count += 1
+                                skipped_details.append(f"PO {po_num} (Req# {req_num} exists)")
+                                continue
+                            
                             req_id = gen_req_id(df_orders)
                             
-                            # Parse date
                             created_date = row.get('Created Date/Time', '')
                             if pd.notna(created_date):
                                 try:
@@ -430,14 +461,13 @@ with tab_import:
                             else:
                                 created_date = datetime.now().strftime('%Y-%m-%d')
                             
-                            # Get total amount
                             total_amount = row.get('Total Amount', 0)
                             if pd.isna(total_amount):
                                 total_amount = 0
                             
                             new_row = {
                                 "REQ#": req_id,
-                                "ITEM": f"[ShopBlue Import - PO {po_num}]",  # Placeholder
+                                "ITEM": f"[Import - add item details]",
                                 "NUMBER OF ITEM": 1,
                                 "AMOUNT PER ITEM": float(total_amount),
                                 "TOTAL": float(total_amount),
@@ -446,7 +476,7 @@ with tab_import:
                                 "GRANT USED": "",
                                 "PO SOURCE": "ShopBlue",
                                 "PO #": po_num,
-                                "NOTES": f"Imported from ShopBlue. Status: {row.get('PO Status', '')}. Shipment: {row.get('Shipment Status', '')}",
+                                "NOTES": f"Requisition: {req_num}. Status: {row.get('PO Status', '')}",
                                 "ORDERED BY": str(row.get('PO Owner', '')),
                                 "DATE ORDERED": created_date,
                                 "DATE RECEIVED": "",
@@ -456,47 +486,206 @@ with tab_import:
                             }
                             
                             df_orders = pd.concat([df_orders, pd.DataFrame([new_row])], ignore_index=True)
+                            existing_pos.add(po_num)
+                            existing_reqs.add(req_num)
                             imported_count += 1
                         
                         if imported_count > 0:
                             save_orders(df_orders)
-                            st.success(f"Successfully imported {imported_count} purchase orders")
-                            if skipped_count > 0:
-                                st.info(f"Skipped {skipped_count} POs (already exist in database)")
-                            st.info("Go to Orders Table to add item details to imported orders")
-                        else:
-                            st.warning("No new POs to import. All selected POs already exist.")
-                
-                with col2:
-                    st.caption("Imported POs will need line item details added manually via the Orders Table")
+                            st.success(f"Imported {imported_count} purchase orders")
+                        
+                        if skipped_count > 0:
+                            st.warning(f"Skipped {skipped_count} duplicates:")
+                            for detail in skipped_details[:10]:
+                                st.caption(f"  - {detail}")
+                            if len(skipped_details) > 10:
+                                st.caption(f"  ... and {len(skipped_details) - 10} more")
+                        
+                        if imported_count == 0 and skipped_count == 0:
+                            st.info("No orders to import")
+            
+            except Exception as e:
+                st.error(f"Error reading file: {str(e)}")
+    
+    else:  # Accounts & Expenses / Inventory File
+        st.markdown("""
+        **Upload your lab tracking spreadsheet** (Accounts & Expenses or Inventory file)
         
-        except Exception as e:
-            st.error(f"Error reading file: {str(e)}")
-            st.info("Make sure you're uploading the correct ShopBlue export file")
+        Expected columns: Req#, Item, #, Amount, Total, Vendor (optional)
+        """)
+        
+        uploaded_file = st.file_uploader(
+            "Upload Excel file (.xlsx)", 
+            type=["xlsx"],
+            key="inventory_upload"
+        )
+        
+        if uploaded_file is not None:
+            try:
+                xl = pd.ExcelFile(uploaded_file)
+                
+                if len(xl.sheet_names) > 1:
+                    selected_sheet = st.selectbox("Select sheet to import:", xl.sheet_names)
+                else:
+                    selected_sheet = xl.sheet_names[0]
+                
+                df_import = pd.read_excel(xl, sheet_name=selected_sheet)
+                
+                # Clean column names
+                df_import.columns = df_import.columns.str.strip()
+                
+                # Check for expected columns
+                if 'Req#' not in df_import.columns and 'Item' not in df_import.columns:
+                    st.error("Could not find expected columns (Req#, Item). Please check your file format.")
+                else:
+                    # Clean up data
+                    df_import = df_import.dropna(subset=['Item'] if 'Item' in df_import.columns else df_import.columns[0:1])
+                    df_import = df_import[df_import['Item'].astype(str).str.len() > 2]  # Remove empty/short rows
+                    
+                    st.success(f"Found {len(df_import)} items in sheet '{selected_sheet}'")
+                    
+                    st.dataframe(df_import.head(10), use_container_width=True)
+                    
+                    if len(df_import) > 10:
+                        st.caption(f"Showing 10 of {len(df_import)} records")
+                    
+                    # Grant field for this import
+                    grant_for_import = st.text_input(
+                        "Grant/Fund for these orders (optional):",
+                        value=selected_sheet if selected_sheet not in ['Sheet1', 'Sheet2'] else "",
+                        help="This will be applied to all imported orders from this sheet"
+                    )
+                    
+                    st.markdown("---")
+                    
+                    if st.button("Import Orders", type="primary", key="import_inventory"):
+                        df_orders = load_orders()
+                        
+                        # Build set of existing Req#s for duplicate checking
+                        existing_reqs = set()
+                        if not df_orders.empty and 'REQ#' in df_orders.columns:
+                            existing_reqs = set(df_orders['REQ#'].astype(str).values)
+                        
+                        # Also check NOTES for Requisition numbers
+                        if not df_orders.empty and 'NOTES' in df_orders.columns:
+                            for note in df_orders['NOTES'].astype(str).values:
+                                if 'Requisition:' in note:
+                                    try:
+                                        req_num = note.split('Requisition:')[1].split('.')[0].strip()
+                                        existing_reqs.add(req_num)
+                                    except:
+                                        pass
+                        
+                        # Check original Req# field too
+                        if not df_orders.empty and 'NOTES' in df_orders.columns:
+                            for note in df_orders['NOTES'].astype(str).values:
+                                if 'Original Req#:' in note:
+                                    try:
+                                        orig_req = note.split('Original Req#:')[1].split('.')[0].strip()
+                                        existing_reqs.add(orig_req)
+                                    except:
+                                        pass
+                        
+                        imported_count = 0
+                        skipped_count = 0
+                        
+                        for _, row in df_import.iterrows():
+                            # Get original Req# from source file
+                            orig_req = str(row.get('Req#', '')).replace('\xa0', '').replace('?', '').strip()
+                            
+                            # Skip invalid entries
+                            if orig_req in ['*', '', 'nan', 'None'] or len(orig_req) < 3:
+                                orig_req = ""
+                            
+                            # Check for duplicates
+                            if orig_req and orig_req in existing_reqs:
+                                skipped_count += 1
+                                continue
+                            
+                            item_name = str(row.get('Item', ''))
+                            if not item_name or item_name == 'nan' or len(item_name) < 2:
+                                continue
+                            
+                            req_id = gen_req_id(df_orders)
+                            
+                            # Parse quantity
+                            qty_raw = row.get('#', 1)
+                            try:
+                                if isinstance(qty_raw, str):
+                                    qty = float(''.join(filter(lambda x: x.isdigit() or x == '.', qty_raw))) or 1
+                                else:
+                                    qty = float(qty_raw) if pd.notna(qty_raw) else 1
+                            except:
+                                qty = 1
+                            
+                            # Parse amount
+                            amount_raw = row.get('Amount', 0)
+                            try:
+                                amount = float(amount_raw) if pd.notna(amount_raw) else 0
+                            except:
+                                amount = 0
+                            
+                            # Parse total
+                            total_raw = row.get('Total', 0)
+                            try:
+                                total = float(total_raw) if pd.notna(total_raw) else (qty * amount)
+                            except:
+                                total = qty * amount
+                            
+                            # Get vendor if available
+                            vendor = str(row.get('Vendor', '')) if 'Vendor' in row else ''
+                            if vendor == 'nan':
+                                vendor = ''
+                            
+                            new_row = {
+                                "REQ#": req_id,
+                                "ITEM": item_name[:200],  # Truncate long names
+                                "NUMBER OF ITEM": qty,
+                                "AMOUNT PER ITEM": amount,
+                                "TOTAL": total,
+                                "VENDOR": vendor,
+                                "CAT #": "",
+                                "GRANT USED": grant_for_import,
+                                "PO SOURCE": "ShopBlue",
+                                "PO #": "",
+                                "NOTES": f"Original Req#: {orig_req}. Imported from {selected_sheet}." if orig_req else f"Imported from {selected_sheet}.",
+                                "ORDERED BY": "",
+                                "DATE ORDERED": "",
+                                "DATE RECEIVED": "",
+                                "RECEIVED BY": "",
+                                "ITEM LOCATION": "",
+                                "LAB": lab_name,
+                            }
+                            
+                            df_orders = pd.concat([df_orders, pd.DataFrame([new_row])], ignore_index=True)
+                            if orig_req:
+                                existing_reqs.add(orig_req)
+                            imported_count += 1
+                        
+                        if imported_count > 0:
+                            save_orders(df_orders)
+                            st.success(f"Imported {imported_count} orders")
+                        
+                        if skipped_count > 0:
+                            st.warning(f"Skipped {skipped_count} duplicates (Req# already exists)")
+                        
+                        if imported_count == 0 and skipped_count == 0:
+                            st.info("No valid orders found to import")
+            
+            except Exception as e:
+                st.error(f"Error reading file: {str(e)}")
+                st.info("Make sure your file has columns: Req#, Item, #, Amount, Total")
     
     st.markdown("---")
-    st.markdown("**What gets imported:**")
+    st.markdown("**Duplicate Detection:**")
+    st.markdown("""
+    The system checks for duplicates by:
+    - PO Number (for ShopBlue imports)
+    - Requisition Number (stored in notes)
+    - Original Req# (for Accounts/Inventory imports)
     
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown("""
-        **Auto-filled from ShopBlue:**
-        - PO Number
-        - Vendor/Supplier
-        - Date Ordered
-        - Ordered By (PO Owner)
-        - Total Amount
-        """)
-    
-    with col2:
-        st.markdown("""
-        **You'll need to add:**
-        - Item name/description
-        - Catalog number
-        - Grant used
-        - Quantity & unit price
-        - Receipt information
-        """)
+    Orders that already exist will be skipped automatically.
+    """)
 
 # TAB 3: Orders Table
 with tab_table:
