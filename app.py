@@ -124,15 +124,17 @@ if not user_email:
     st.markdown("---")
     st.markdown("### 💡 Getting Started")
     st.markdown("""
-    **For Admin (ogunbowaleadeola@gmail.com):**
-    - Access all labs and features
-    - View complete analytics
-    - Manage all orders
+    **For Lab Users:**
+    - Create account with your lab email
+    - Access your lab's orders
+    - Track inventory and spending
+    - View analytics for your lab
     
-    **For Regular Users:**
-    - Create account with your email
-    - Access your lab's orders only
-    - Track your inventory
+    **Features:**
+    - Real-time order tracking
+    - ML-powered predictions
+    - Automated reporting
+    - Multi-lab support
     """)
     
     show_login_warning()
