@@ -411,7 +411,7 @@ if not user_email:
         
         # Connection status
         if USE_FIRESTORE:
-            st.success("Connected to database", icon="✓")
+            st.success("Connected to database")
         else:
             st.warning("Development mode (local storage)")
         
