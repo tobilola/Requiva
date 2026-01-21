@@ -35,11 +35,357 @@ from ml_engine import (
     get_bulk_opportunities,
 )
 
+# Page config
 st.set_page_config(
     page_title="Requiva - Lab Order Management", 
     page_icon="R", 
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
+
+# Custom CSS for professional styling
+st.markdown("""
+<style>
+    /* Main theme colors */
+    :root {
+        --primary: #1e3a5f;
+        --primary-light: #2d5a8b;
+        --secondary: #0d9488;
+        --success: #059669;
+        --warning: #d97706;
+        --danger: #dc2626;
+        --gray-50: #f9fafb;
+        --gray-100: #f3f4f6;
+        --gray-200: #e5e7eb;
+        --gray-600: #4b5563;
+        --gray-800: #1f2937;
+    }
+    
+    /* Hide Streamlit branding */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    
+    /* Main container */
+    .main .block-container {
+        padding-top: 2rem;
+        padding-bottom: 2rem;
+        max-width: 1200px;
+    }
+    
+    /* Headers */
+    h1 {
+        color: #1e3a5f !important;
+        font-weight: 700 !important;
+        letter-spacing: -0.5px;
+    }
+    
+    h2, h3 {
+        color: #1f2937 !important;
+        font-weight: 600 !important;
+    }
+    
+    /* Sidebar styling */
+    [data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #1e3a5f 0%, #2d5a8b 100%);
+    }
+    
+    [data-testid="stSidebar"] * {
+        color: white !important;
+    }
+    
+    [data-testid="stSidebar"] .stButton button {
+        background-color: rgba(255,255,255,0.15) !important;
+        border: 1px solid rgba(255,255,255,0.3) !important;
+        color: white !important;
+    }
+    
+    [data-testid="stSidebar"] .stButton button:hover {
+        background-color: rgba(255,255,255,0.25) !important;
+        border: 1px solid rgba(255,255,255,0.5) !important;
+    }
+    
+    /* Cards */
+    .metric-card {
+        background: white;
+        border-radius: 12px;
+        padding: 1.5rem;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        border: 1px solid #e5e7eb;
+        text-align: center;
+    }
+    
+    .metric-card h3 {
+        font-size: 0.875rem;
+        color: #6b7280 !important;
+        font-weight: 500;
+        margin-bottom: 0.5rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    
+    .metric-card .value {
+        font-size: 2rem;
+        font-weight: 700;
+        color: #1e3a5f;
+    }
+    
+    .metric-card.success .value { color: #059669; }
+    .metric-card.warning .value { color: #d97706; }
+    .metric-card.danger .value { color: #dc2626; }
+    
+    /* Status badges */
+    .status-badge {
+        display: inline-block;
+        padding: 0.25rem 0.75rem;
+        border-radius: 9999px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    
+    .status-pending {
+        background-color: #fef3c7;
+        color: #92400e;
+    }
+    
+    .status-received {
+        background-color: #d1fae5;
+        color: #065f46;
+    }
+    
+    .status-urgent {
+        background-color: #fee2e2;
+        color: #991b1b;
+    }
+    
+    /* Section headers */
+    .section-header {
+        background: linear-gradient(90deg, #1e3a5f 0%, #2d5a8b 100%);
+        color: white;
+        padding: 0.75rem 1rem;
+        border-radius: 8px;
+        margin-bottom: 1rem;
+        font-weight: 600;
+    }
+    
+    /* Form styling */
+    .stTextInput > div > div > input,
+    .stTextArea > div > div > textarea,
+    .stSelectbox > div > div > div {
+        border-radius: 8px !important;
+        border: 1px solid #d1d5db !important;
+    }
+    
+    .stTextInput > div > div > input:focus,
+    .stTextArea > div > div > textarea:focus {
+        border-color: #1e3a5f !important;
+        box-shadow: 0 0 0 2px rgba(30, 58, 95, 0.1) !important;
+    }
+    
+    /* Buttons */
+    .stButton > button[kind="primary"] {
+        background: linear-gradient(90deg, #1e3a5f 0%, #2d5a8b 100%) !important;
+        border: none !important;
+        border-radius: 8px !important;
+        padding: 0.5rem 1.5rem !important;
+        font-weight: 600 !important;
+        transition: all 0.2s ease !important;
+    }
+    
+    .stButton > button[kind="primary"]:hover {
+        transform: translateY(-1px) !important;
+        box-shadow: 0 4px 12px rgba(30, 58, 95, 0.3) !important;
+    }
+    
+    .stButton > button[kind="secondary"] {
+        background: white !important;
+        border: 1px solid #d1d5db !important;
+        border-radius: 8px !important;
+        color: #374151 !important;
+    }
+    
+    /* Tabs */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 0;
+        background-color: #f3f4f6;
+        border-radius: 10px;
+        padding: 4px;
+    }
+    
+    .stTabs [data-baseweb="tab"] {
+        border-radius: 8px;
+        padding: 0.5rem 1rem;
+        font-weight: 500;
+    }
+    
+    .stTabs [aria-selected="true"] {
+        background-color: white !important;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    
+    /* Dataframe styling */
+    .stDataFrame {
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    
+    /* Alerts */
+    .stAlert {
+        border-radius: 8px !important;
+    }
+    
+    /* Info boxes */
+    .info-box {
+        background: #f0f9ff;
+        border-left: 4px solid #0ea5e9;
+        padding: 1rem;
+        border-radius: 0 8px 8px 0;
+        margin: 1rem 0;
+    }
+    
+    .warning-box {
+        background: #fffbeb;
+        border-left: 4px solid #f59e0b;
+        padding: 1rem;
+        border-radius: 0 8px 8px 0;
+        margin: 1rem 0;
+    }
+    
+    .success-box {
+        background: #ecfdf5;
+        border-left: 4px solid #10b981;
+        padding: 1rem;
+        border-radius: 0 8px 8px 0;
+        margin: 1rem 0;
+    }
+    
+    /* Expander */
+    .streamlit-expanderHeader {
+        background-color: #f9fafb !important;
+        border-radius: 8px !important;
+        font-weight: 500 !important;
+    }
+    
+    /* Progress indicator */
+    .progress-bar {
+        height: 8px;
+        background: #e5e7eb;
+        border-radius: 4px;
+        overflow: hidden;
+    }
+    
+    .progress-bar-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #059669 0%, #10b981 100%);
+        border-radius: 4px;
+    }
+    
+    /* Table enhancements */
+    .styled-table {
+        width: 100%;
+        border-collapse: collapse;
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    
+    .styled-table thead {
+        background: #1e3a5f;
+        color: white;
+    }
+    
+    .styled-table th {
+        padding: 12px 16px;
+        text-align: left;
+        font-weight: 600;
+        font-size: 0.875rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    
+    .styled-table td {
+        padding: 12px 16px;
+        border-bottom: 1px solid #e5e7eb;
+    }
+    
+    .styled-table tbody tr:hover {
+        background-color: #f9fafb;
+    }
+    
+    /* Login page */
+    .login-container {
+        max-width: 400px;
+        margin: 0 auto;
+        padding: 2rem;
+        background: white;
+        border-radius: 16px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+    }
+    
+    .logo-text {
+        font-size: 2.5rem;
+        font-weight: 700;
+        color: #1e3a5f;
+        text-align: center;
+        margin-bottom: 0.5rem;
+    }
+    
+    .tagline {
+        color: #6b7280;
+        text-align: center;
+        margin-bottom: 2rem;
+    }
+    
+    /* Divider */
+    .divider {
+        height: 1px;
+        background: #e5e7eb;
+        margin: 1.5rem 0;
+    }
+    
+    /* Quick stats row */
+    .stats-row {
+        display: flex;
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+    }
+    
+    /* Empty state */
+    .empty-state {
+        text-align: center;
+        padding: 3rem;
+        color: #6b7280;
+    }
+    
+    .empty-state-icon {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# Helper functions for styled components
+def metric_card(title, value, card_type="default"):
+    type_class = card_type if card_type != "default" else ""
+    st.markdown(f"""
+        <div class="metric-card {type_class}">
+            <h3>{title}</h3>
+            <div class="value">{value}</div>
+        </div>
+    """, unsafe_allow_html=True)
+
+def status_badge(status):
+    if status.lower() in ['pending', 'urgent']:
+        return f'<span class="status-badge status-pending">{status}</span>'
+    elif status.lower() in ['received', 'complete', 'completed']:
+        return f'<span class="status-badge status-received">{status}</span>'
+    else:
+        return f'<span class="status-badge">{status}</span>'
+
+def section_header(title):
+    st.markdown(f'<div class="section-header">{title}</div>', unsafe_allow_html=True)
 
 # Initialize session state
 if "auth_user" not in st.session_state:
@@ -51,126 +397,288 @@ if "show_reset_password" not in st.session_state:
 if "imported_pos" not in st.session_state:
     st.session_state.imported_pos = None
 
-# Sidebar System Status
-with st.sidebar:
-    st.markdown("---")
-    with st.expander("System Status"):
-        st.write(f"**Backend:** {'Firestore' if USE_FIRESTORE else 'CSV (Dev Mode)'}")
-        
-        firebase_json_exists = bool(os.getenv("FIREBASE_JSON"))
-        old_var_exists = bool(os.getenv("firebase-service-account.json"))
-        
-        st.write(f"**FIREBASE_JSON:** {'Set' if firebase_json_exists else 'Not Set'}")
-        
-        if old_var_exists:
-            st.warning("Old variable 'firebase-service-account.json' detected. Rename to 'FIREBASE_JSON'")
-        
-        if USE_FIRESTORE:
-            st.success("Firestore Connected")
-        else:
-            st.error("Firestore Not Connected")
-            st.caption("Add FIREBASE_JSON env variable to enable Firestore")
-
 # Authentication Check
 user_email = check_auth_status()
 
+# ============== LOGIN PAGE ==============
 if not user_email:
-    st.title("Requiva")
-    st.markdown("##### Lab Order Management System")
-    st.markdown("---")
-    
-    login_form()
-    
-    st.markdown("---")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("**New User?**")
-        with st.expander("Create Account", expanded=False):
-            new_email = st.text_input("Email", key="new_account_email", placeholder="your.email@buffalo.edu")
-            new_password = st.text_input("Password", type="password", key="new_account_password", placeholder="Min 6 characters")
-            
-            if st.button("Create Account", type="primary", key="create_account_btn"):
-                if not new_email or not new_password:
-                    st.error("Email and password are required")
-                elif len(new_password) < 6:
-                    st.error("Password must be at least 6 characters")
-                else:
-                    success, msg = create_account(new_email, new_password)
-                    if success:
-                        st.success(msg)
-                        st.info("Please login with your new credentials above")
-                    else:
-                        st.error(msg)
+    # Centered login container
+    col1, col2, col3 = st.columns([1, 2, 1])
     
     with col2:
-        st.markdown("**Forgot Password?**")
-        with st.expander("Request Password Reset", expanded=False):
-            reset_email = st.text_input("Your Email", key="reset_email", placeholder="your.email@buffalo.edu")
+        st.markdown('<div class="logo-text">Requiva</div>', unsafe_allow_html=True)
+        st.markdown('<p class="tagline">Lab Order Management System</p>', unsafe_allow_html=True)
+        
+        # Connection status
+        if USE_FIRESTORE:
+            st.success("Connected to database", icon="✓")
+        else:
+            st.warning("Development mode (local storage)")
+        
+        st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+        
+        # Login form
+        with st.form("login_form", clear_on_submit=False):
+            email = st.text_input(
+                "Email", 
+                placeholder="your.email@buffalo.edu",
+            )
+            password = st.text_input(
+                "Password", 
+                type="password",
+                placeholder="Enter your password",
+            )
             
-            if st.button("Request Reset", type="secondary", key="reset_password_btn"):
-                if not reset_email:
-                    st.error("Email is required")
+            submitted = st.form_submit_button("Sign In", type="primary", use_container_width=True)
+            
+            if submitted:
+                if not email or not password:
+                    st.error("Please enter both email and password")
                 else:
-                    success, msg = reset_password_request(reset_email)
-                    if success:
-                        st.success(msg)
+                    email = email.strip().lower()
+                    from utils import hash_password, db
+                    
+                    if USE_FIRESTORE and db:
+                        try:
+                            user_ref = db.collection("users").document(email)
+                            user = user_ref.get(timeout=10)
+                            
+                            if user.exists:
+                                user_data = user.to_dict()
+                                if user_data.get("password") == hash_password(password):
+                                    st.session_state.auth_user = email
+                                    st.success("Login successful")
+                                    st.rerun()
+                                else:
+                                    st.error("Invalid password")
+                            else:
+                                st.error("Account not found")
+                        except Exception as e:
+                            st.error("Connection failed. Please try again.")
                     else:
-                        st.error(msg)
+                        # Dev mode
+                        DEV_USERS = {"test@buffalo.edu": "test123", "ogunbowaleadeola@gmail.com": "admin123"}
+                        if email in DEV_USERS and DEV_USERS[email] == password:
+                            st.session_state.auth_user = email
+                            st.rerun()
+                        else:
+                            st.error("Invalid credentials")
+        
+        st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+        
+        # Account options
+        col_a, col_b = st.columns(2)
+        
+        with col_a:
+            with st.expander("Create Account"):
+                new_email = st.text_input("Email", key="new_email", placeholder="your.email@buffalo.edu")
+                new_password = st.text_input("Password", type="password", key="new_pass", placeholder="Min 6 characters")
+                
+                if st.button("Create Account", use_container_width=True):
+                    if new_email and new_password:
+                        success, msg = create_account(new_email, new_password)
+                        if success:
+                            st.success(msg)
+                        else:
+                            st.error(msg)
+        
+        with col_b:
+            with st.expander("Forgot Password"):
+                reset_email = st.text_input("Email", key="reset_email", placeholder="your.email@buffalo.edu")
+                
+                if st.button("Reset Password", use_container_width=True):
+                    if reset_email:
+                        success, msg = reset_password_request(reset_email)
+                        if success:
+                            st.success(msg)
+                        else:
+                            st.error(msg)
+        
+        st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+        st.markdown("""
+            <p style="text-align: center; color: #6b7280; font-size: 0.875rem;">
+                Adelaiye-Ogala Lab · University at Buffalo
+            </p>
+        """, unsafe_allow_html=True)
     
-    st.markdown("---")
-    st.markdown("**Getting Started**")
-    st.markdown("""
-    - Create an account with your @buffalo.edu email
-    - Access your lab's orders and track inventory
-    - View analytics and spending reports
-    - Export data for reporting
-    """)
-    
-    show_login_warning()
     st.stop()
 
-# User is logged in - Show Main App
+# ============== MAIN APP (Logged In) ==============
 lab_name = get_user_lab(user_email)
 
-# Sidebar User Info
-st.sidebar.title("User")
-st.sidebar.write(f"**Lab:** {lab_name}")
-st.sidebar.write(f"**Email:** {user_email}")
+# Sidebar
+with st.sidebar:
+    st.markdown(f"""
+        <div style="padding: 1rem 0;">
+            <div style="font-size: 1.5rem; font-weight: 700;">Requiva</div>
+            <div style="font-size: 0.875rem; opacity: 0.8;">Lab Order Management</div>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    st.markdown('<div class="divider" style="background: rgba(255,255,255,0.2);"></div>', unsafe_allow_html=True)
+    
+    st.markdown(f"""
+        <div style="padding: 0.5rem 0;">
+            <div style="font-size: 0.75rem; opacity: 0.7; text-transform: uppercase; letter-spacing: 0.5px;">Logged in as</div>
+            <div style="font-weight: 500;">{user_email}</div>
+            <div style="font-size: 0.875rem; opacity: 0.8; margin-top: 0.25rem;">{lab_name}</div>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    if is_admin(user_email):
+        st.markdown("""
+            <div style="background: rgba(255,255,255,0.15); padding: 0.5rem; border-radius: 6px; margin-top: 0.5rem;">
+                <span style="font-size: 0.75rem;">Admin Access</span>
+            </div>
+        """, unsafe_allow_html=True)
+    
+    st.markdown('<div class="divider" style="background: rgba(255,255,255,0.2);"></div>', unsafe_allow_html=True)
+    
+    if st.button("Sign Out", use_container_width=True):
+        st.session_state.auth_user = None
+        st.rerun()
+    
+    st.markdown('<div class="divider" style="background: rgba(255,255,255,0.2);"></div>', unsafe_allow_html=True)
+    
+    # Quick stats in sidebar
+    df_sidebar = load_orders()
+    df_sidebar = filter_by_lab(df_sidebar, user_email)
+    
+    if not df_sidebar.empty:
+        total_orders = len(df_sidebar)
+        pending = len(df_sidebar[(df_sidebar["DATE RECEIVED"].isna()) | (df_sidebar["DATE RECEIVED"] == "")])
+        
+        st.markdown(f"""
+            <div style="padding: 0.5rem 0;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                    <span style="opacity: 0.8;">Total Orders</span>
+                    <span style="font-weight: 600;">{total_orders}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between;">
+                    <span style="opacity: 0.8;">Pending</span>
+                    <span style="font-weight: 600; color: #fbbf24;">{pending}</span>
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
 
+# Main content header
+st.markdown("""
+    <div style="margin-bottom: 1.5rem;">
+        <h1 style="margin-bottom: 0.25rem;">Dashboard</h1>
+        <p style="color: #6b7280; margin: 0;">Manage your lab orders and inventory</p>
+    </div>
+""", unsafe_allow_html=True)
+
+# Main Tabs - Import only visible to admins
 if is_admin(user_email):
-    st.sidebar.warning("Admin Access")
-    st.sidebar.caption("You can see all labs")
-
-if st.sidebar.button("Logout", key="logout_btn", type="primary"):
-    st.session_state.auth_user = None
-    st.success("Logged out successfully")
-    st.rerun()
-
-# Main App Title
-st.title("Requiva")
-st.caption("Lab Order Management System | Adelaiye-Ogala Lab")
-
-# Backend Status
-if USE_FIRESTORE:
-    st.caption("Connected to Firestore")
+    tab_dashboard, tab_new, tab_import, tab_table, tab_analytics, tab_export = st.tabs([
+        "Overview",
+        "New Order", 
+        "Import Data",
+        "All Orders", 
+        "Analytics",
+        "Export"
+    ])
 else:
-    st.warning("Using local CSV - Development Mode")
+    tab_dashboard, tab_new, tab_table, tab_analytics, tab_export = st.tabs([
+        "Overview",
+        "New Order", 
+        "All Orders", 
+        "Analytics",
+        "Export"
+    ])
+    tab_import = None  # Not available for non-admins
 
-# Main Tabs
-tab_new, tab_import, tab_table, tab_analytics, tab_ml_insights, tab_export = st.tabs([
-    "New Order", 
-    "Import Data",
-    "Orders Table", 
-    "Analytics", 
-    "ML Insights",
-    "Export"
-])
+# ============== TAB: Dashboard Overview ==============
+with tab_dashboard:
+    df = load_orders()
+    df = filter_by_lab(df, user_email)
+    
+    if df.empty:
+        st.markdown("""
+            <div class="empty-state">
+                <div class="empty-state-icon">📋</div>
+                <h3>No orders yet</h3>
+                <p>Start by creating a new order or importing data from ShopBlue.</p>
+            </div>
+        """, unsafe_allow_html=True)
+    else:
+        # Key metrics row
+        col1, col2, col3, col4 = st.columns(4)
+        
+        total_orders = len(df)
+        total_spending = df["TOTAL"].sum() if "TOTAL" in df.columns else 0
+        pending = len(df[(df["DATE RECEIVED"].isna()) | (df["DATE RECEIVED"] == "")])
+        received = total_orders - pending
+        
+        with col1:
+            metric_card("Total Orders", f"{total_orders:,}")
+        
+        with col2:
+            metric_card("Total Spending", f"${total_spending:,.2f}")
+        
+        with col3:
+            metric_card("Pending", str(pending), "warning" if pending > 0 else "success")
+        
+        with col4:
+            metric_card("Received", str(received), "success")
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        # Two column layout for recent orders and pending
+        col_left, col_right = st.columns([3, 2])
+        
+        with col_left:
+            section_header("Recent Orders")
+            
+            df_recent = df.sort_values('DATE ORDERED', ascending=False).head(5) if 'DATE ORDERED' in df.columns else df.head(5)
+            
+            for _, row in df_recent.iterrows():
+                is_pending = pd.isna(row.get("DATE RECEIVED")) or row.get("DATE RECEIVED") == ""
+                status_html = status_badge("Pending" if is_pending else "Received")
+                
+                st.markdown(f"""
+                    <div style="background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 1rem; margin-bottom: 0.75rem;">
+                        <div style="display: flex; justify-content: space-between; align-items: start;">
+                            <div>
+                                <div style="font-weight: 600; color: #1f2937;">{row.get('ITEM', 'N/A')[:50]}{'...' if len(str(row.get('ITEM', ''))) > 50 else ''}</div>
+                                <div style="font-size: 0.875rem; color: #6b7280; margin-top: 0.25rem;">{row.get('VENDOR', 'N/A')}</div>
+                            </div>
+                            <div style="text-align: right;">
+                                <div style="font-weight: 600; color: #1e3a5f;">${row.get('TOTAL', 0):,.2f}</div>
+                                {status_html}
+                            </div>
+                        </div>
+                    </div>
+                """, unsafe_allow_html=True)
+        
+        with col_right:
+            section_header("Pending Items")
+            
+            df_pending = df[(df["DATE RECEIVED"].isna()) | (df["DATE RECEIVED"] == "")]
+            
+            if df_pending.empty:
+                st.markdown("""
+                    <div style="background: #ecfdf5; border-radius: 8px; padding: 1.5rem; text-align: center;">
+                        <div style="color: #059669; font-weight: 600;">All caught up!</div>
+                        <div style="color: #6b7280; font-size: 0.875rem; margin-top: 0.25rem;">No pending items</div>
+                    </div>
+                """, unsafe_allow_html=True)
+            else:
+                for _, row in df_pending.head(5).iterrows():
+                    st.markdown(f"""
+                        <div style="background: #fffbeb; border-left: 3px solid #f59e0b; padding: 0.75rem; margin-bottom: 0.5rem; border-radius: 0 6px 6px 0;">
+                            <div style="font-weight: 500; font-size: 0.875rem;">{row.get('ITEM', 'N/A')[:40]}</div>
+                            <div style="font-size: 0.75rem; color: #6b7280;">Ordered: {row.get('DATE ORDERED', 'N/A')}</div>
+                        </div>
+                    """, unsafe_allow_html=True)
+                
+                if len(df_pending) > 5:
+                    st.caption(f"+ {len(df_pending) - 5} more pending items")
 
-# TAB 1: New Order
+# ============== TAB: New Order ==============
 with tab_new:
-    st.subheader("Create New Order")
+    section_header("Create New Order")
     
     df = load_orders()
     df = filter_by_lab(df, user_email)
@@ -178,126 +686,74 @@ with tab_new:
     for col in REQUIRED_COLUMNS:
         if col not in df.columns:
             df[col] = ""
-
-    col1, col2, col3 = st.columns(3)
     
-    with col1:
-        st.markdown("**Item Details**")
-        item = st.text_input(
-            "ITEM *", 
-            placeholder="e.g., Fetal Bovine Serum (FBS) 500 mL", 
-            key="new_item",
-            help="Name and description of the item"
-        )
-        vendor = st.text_input(
-            "VENDOR *", 
-            placeholder="e.g., Thermo Fisher", 
-            key="new_vendor",
-            help="Supplier or vendor name"
-        )
-        cat_no = st.text_input(
-            "CAT #", 
-            placeholder="e.g., 12345-TF", 
-            key="new_cat",
-            help="Catalog or part number"
-        )
-        grant_used = st.text_input(
-            "GRANT USED", 
-            placeholder="e.g., R01CA12345", 
-            key="new_grant",
-            help="Grant number(s) - comma separated if multiple"
-        )
-
-    with col2:
-        st.markdown("**Pricing & Purchase**")
-        qty = st.number_input(
-            "NUMBER OF ITEMS *", 
-            min_value=0.0, 
-            value=1.0, 
-            step=1.0, 
-            key="new_qty",
-            help="Quantity to order"
-        )
-        unit_price = st.number_input(
-            "AMOUNT PER ITEM *", 
-            min_value=0.0, 
-            value=0.0, 
-            step=1.0, 
-            format="%.2f", 
-            key="new_price",
-            help="Price per unit in USD"
-        )
+    # Form in organized sections
+    with st.form("new_order_form"):
+        st.markdown("**Item Information**")
+        col1, col2 = st.columns(2)
         
-        if qty > 0 and unit_price > 0:
-            calculated_total = qty * unit_price
-            st.metric("Calculated Total", f"${calculated_total:,.2f}")
+        with col1:
+            item = st.text_input("Item Name *", placeholder="e.g., Fetal Bovine Serum (FBS) 500 mL")
+            vendor = st.text_input("Vendor *", placeholder="e.g., Fisher Scientific")
+            cat_no = st.text_input("Catalog #", placeholder="e.g., 12345-TF")
         
-        po_source = st.selectbox(
-            "PO SOURCE", 
-            ["ShopBlue", "Stock Room", "External Vendor"], 
-            index=0, 
-            key="new_po_source",
-            help="Purchase order source"
-        )
-        po_no = st.text_input(
-            "PO #", 
-            placeholder="e.g., 1481052", 
-            key="new_po_no",
-            help="Purchase order number"
-        )
-
-    with col3:
-        st.markdown("**Additional Info**")
-        notes = st.text_area(
-            "NOTES", 
-            placeholder="Any notes (urgent, storage requirements, etc.)", 
-            key="new_notes",
-            help="Special instructions or notes"
-        )
-        ordered_by = st.text_input(
-            "ORDERED BY", 
-            placeholder="Your name", 
-            value=user_email.split('@')[0],
-            key="new_ordered_by",
-            help="Person placing the order"
-        )
-        date_ordered = st.date_input(
-            "DATE ORDERED", 
-            value=date.today(), 
-            key="new_date_ordered",
-            help="Date the order was placed"
-        )
+        with col2:
+            grant_used = st.text_input("Grant", placeholder="e.g., R01CA12345")
+            po_source = st.selectbox("PO Source", ["ShopBlue", "Stock Room", "External Vendor"])
+            po_no = st.text_input("PO #", placeholder="e.g., 1481052")
         
-        st.markdown("**Receipt Information (Optional)**")
-        received_flag = st.checkbox("Item already received?", key="new_received_flag")
+        st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+        st.markdown("**Pricing**")
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            qty = st.number_input("Quantity *", min_value=0.0, value=1.0, step=1.0)
+        
+        with col2:
+            unit_price = st.number_input("Unit Price ($) *", min_value=0.0, value=0.0, step=0.01, format="%.2f")
+        
+        with col3:
+            if qty > 0 and unit_price > 0:
+                st.markdown(f"""
+                    <div style="background: #ecfdf5; padding: 1rem; border-radius: 8px; margin-top: 1.5rem;">
+                        <div style="font-size: 0.75rem; color: #059669; text-transform: uppercase;">Total</div>
+                        <div style="font-size: 1.5rem; font-weight: 700; color: #059669;">${qty * unit_price:,.2f}</div>
+                    </div>
+                """, unsafe_allow_html=True)
+        
+        st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+        st.markdown("**Order Details**")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            ordered_by = st.text_input("Ordered By", value=user_email.split('@')[0])
+            date_ordered = st.date_input("Date Ordered", value=date.today())
+        
+        with col2:
+            notes = st.text_area("Notes", placeholder="Any special instructions...", height=100)
+        
+        st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+        
+        received_flag = st.checkbox("Mark as received")
         
         if received_flag:
-            date_received = st.date_input(
-                "DATE RECEIVED", 
-                value=date.today(), 
-                key="new_date_received"
-            )
-            received_by = st.text_input(
-                "RECEIVED BY", 
-                placeholder="Receiver name", 
-                key="new_received_by"
-            )
-            location = st.text_input(
-                "ITEM LOCATION", 
-                placeholder="e.g., Freezer A, Shelf 2", 
-                key="new_location"
-            )
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                date_received = st.date_input("Date Received", value=date.today())
+            with col2:
+                received_by = st.text_input("Received By")
+            with col3:
+                location = st.text_input("Storage Location")
         else:
             date_received = None
             received_by = ""
             location = ""
-
-    st.markdown("---")
-    
-    col_submit, col_clear = st.columns([1, 4])
-    
-    with col_submit:
-        if st.button("Add Order", type="primary", key="submit_order", use_container_width=True):
+        
+        submitted = st.form_submit_button("Add Order", type="primary", use_container_width=True)
+        
+        if submitted:
             ok, msg = validate_order(item, qty, unit_price, vendor)
             
             if not ok:
@@ -329,93 +785,101 @@ with tab_new:
                 df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
                 save_orders(df)
                 
-                st.success(f"Order {req_id} added successfully. Total: ${total:,.2f}")
-                st.info("Refresh the Orders Table tab to see your new order")
+                st.success(f"Order {req_id} added successfully — ${total:,.2f}")
 
-# TAB 2: Import Data
-with tab_import:
-    st.subheader("Import Orders")
-    
-    import_type = st.radio(
-        "Select import source:",
-        ["ShopBlue Export", "Accounts & Expenses / Inventory File"],
-        horizontal=True
-    )
-    
-    st.markdown("---")
-    
-    if import_type == "ShopBlue Export":
-        st.markdown("""
-        **How to export from ShopBlue:**
-        1. Log into ShopBlue
-        2. Click user icon (top right) → Manage Searches
-        3. Navigate to Shared → UB - ShopBlue Support
-        4. Click Export on "Purchase Orders Completed"
-        5. Download the Excel file and upload below
-        """)
+# ============== TAB: Import Data (Admin Only) ==============
+if is_admin(user_email) and tab_import is not None:
+    with tab_import:
+        section_header("Import Orders (Admin)")
         
-        uploaded_file = st.file_uploader(
-            "Upload ShopBlue Export (.xlsx)", 
-            type=["xlsx"],
-            key="shopblue_upload"
+        import_type = st.radio(
+            "Select import source:",
+            ["ShopBlue Export", "Lab Inventory/Accounts File"],
+            horizontal=True
         )
         
-        if uploaded_file is not None:
-            try:
-                df_import = pd.read_excel(uploaded_file, header=9)
-                
-                expected_cols = ['PO Number', 'Supplier', 'Created Date/Time', 'Total Amount']
-                if not all(col in df_import.columns for col in expected_cols):
-                    st.error("This doesn't appear to be a valid ShopBlue export. Please check the file.")
-                else:
-                    st.success(f"Found {len(df_import)} purchase orders")
+        st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+        
+        if import_type == "ShopBlue Export":
+            st.markdown("""
+                <div class="info-box">
+                    <strong>How to export from ShopBlue:</strong><br>
+                    1. Log into ShopBlue → Click user icon → Manage Searches<br>
+                    2. Navigate to Shared → UB - ShopBlue Support<br>
+                    3. Click Export on "Purchase Orders Completed"
+                </div>
+            """, unsafe_allow_html=True)
+            
+            uploaded_file = st.file_uploader("Upload ShopBlue Export", type=["xlsx"], key="shopblue_upload")
+            
+            if uploaded_file is not None:
+                try:
+                    df_import = pd.read_excel(uploaded_file, header=9)
                     
-                    preview_cols = ['PO Number', 'Requisition Number', 'Supplier', 'Total Amount']
-                    preview_cols = [c for c in preview_cols if c in df_import.columns]
-                    st.dataframe(df_import[preview_cols].head(10), use_container_width=True)
-                    
-                    if len(df_import) > 10:
-                        st.caption(f"Showing 10 of {len(df_import)} records")
-                    
-                    # Load existing orders to check for duplicates
-                    df_orders = load_orders()
-                    existing_pos = set(df_orders['PO #'].astype(str).values) if 'PO #' in df_orders.columns else set()
-                    existing_reqs = set(df_orders['REQ#'].astype(str).str.replace('REQ-', '').values) if 'REQ#' in df_orders.columns else set()
-                    
-                    # Also check Requisition Numbers from ShopBlue
-                    if 'Requisition Number' in df_import.columns:
-                        shopblue_req_nums = df_import['Requisition Number'].astype(str).tolist()
-                        already_imported = [r for r in shopblue_req_nums if r in existing_reqs]
-                        if already_imported:
-                            st.warning(f"Found {len(already_imported)} orders that may already exist (by Requisition Number)")
-                    
-                    st.markdown("---")
-                    
-                    po_numbers = df_import['PO Number'].astype(str).tolist()
-                    selected_pos = st.multiselect(
-                        "Select POs to import (leave empty for all)",
-                        options=po_numbers,
-                        default=[],
-                        key="select_pos"
-                    )
-                    
-                    if not selected_pos:
-                        selected_pos = po_numbers
-                    
-                    st.write(f"Will import: {len(selected_pos)} purchase orders")
-                    
-                    if st.button("Import Selected POs", type="primary"):
+                    expected_cols = ['PO Number', 'Supplier', 'Created Date/Time', 'Total Amount']
+                    if not all(col in df_import.columns for col in expected_cols):
+                        st.error("Invalid ShopBlue export format")
+                    else:
+                        st.success(f"Found {len(df_import)} purchase orders")
+                        
+                        # Show relevant ShopBlue columns
+                        st.markdown("**ShopBlue Data Preview:**")
+                        
+                        # Define display columns with better names
+                        shopblue_display = pd.DataFrame()
+                        shopblue_display['PO #'] = df_import['PO Number'].astype(str)
+                        shopblue_display['Requisition #'] = df_import['Requisition Number'].astype(str) if 'Requisition Number' in df_import.columns else ''
+                        shopblue_display['Vendor'] = df_import['Supplier']
+                        shopblue_display['Date'] = pd.to_datetime(df_import['Created Date/Time'], errors='coerce').dt.strftime('%Y-%m-%d')
+                        shopblue_display['Owner'] = df_import['PO Owner'] if 'PO Owner' in df_import.columns else ''
+                        shopblue_display['Status'] = df_import['PO Status'] if 'PO Status' in df_import.columns else ''
+                        shopblue_display['Shipment'] = df_import['Shipment Status'] if 'Shipment Status' in df_import.columns else ''
+                        shopblue_display['Total'] = df_import['Total Amount'].apply(lambda x: f"${x:,.2f}" if pd.notna(x) else "$0.00")
+                        
+                        st.dataframe(shopblue_display, use_container_width=True, height=300)
+                        
+                        # Show what will be imported vs what needs to be added manually
+                        st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+                        
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            st.markdown("""
+                                <div style="background: #ecfdf5; border-radius: 8px; padding: 1rem;">
+                                    <strong style="color: #059669;">Auto-imported from ShopBlue:</strong>
+                                    <ul style="margin: 0.5rem 0 0 0; padding-left: 1.25rem; color: #065f46;">
+                                        <li>PO Number</li>
+                                        <li>Requisition Number</li>
+                                        <li>Vendor/Supplier</li>
+                                        <li>Date Ordered</li>
+                                        <li>Ordered By (PO Owner)</li>
+                                        <li>Total Amount</li>
+                                    </ul>
+                                </div>
+                            """, unsafe_allow_html=True)
+                        
+                        with col2:
+                            st.markdown("""
+                                <div style="background: #fef3c7; border-radius: 8px; padding: 1rem;">
+                                    <strong style="color: #92400e;">Needs manual entry:</strong>
+                                    <ul style="margin: 0.5rem 0 0 0; padding-left: 1.25rem; color: #78350f;">
+                                        <li>Item Name/Description</li>
+                                        <li>Catalog Number</li>
+                                        <li>Grant Used</li>
+                                        <li>Quantity & Unit Price</li>
+                                        <li>Receipt Info (when received)</li>
+                                        <li>Storage Location</li>
+                                    </ul>
+                                </div>
+                            """, unsafe_allow_html=True)
+                        
+                        st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+                        
+                        # Check for existing duplicates
                         df_orders = load_orders()
-                        
-                        # Build sets for duplicate checking
-                        existing_pos = set(df_orders['PO #'].astype(str).values) if not df_orders.empty and 'PO #' in df_orders.columns else set()
+                        existing_pos = set(df_orders['PO #'].astype(str).values) if 'PO #' in df_orders.columns else set()
                         existing_reqs = set()
-                        if not df_orders.empty and 'REQ#' in df_orders.columns:
-                            # Extract numeric part of REQ# for comparison
-                            for req in df_orders['REQ#'].astype(str).values:
-                                existing_reqs.add(req)
                         
-                        # Also track Requisition Numbers stored in NOTES
                         if not df_orders.empty and 'NOTES' in df_orders.columns:
                             for note in df_orders['NOTES'].astype(str).values:
                                 if 'Requisition:' in note:
@@ -425,271 +889,206 @@ with tab_import:
                                     except:
                                         pass
                         
-                        imported_count = 0
-                        skipped_count = 0
-                        skipped_details = []
-                        
+                        # Count potential duplicates
+                        dup_count = 0
                         for _, row in df_import.iterrows():
                             po_num = str(row.get('PO Number', ''))
                             req_num = str(row.get('Requisition Number', ''))
-                            
-                            if po_num not in selected_pos:
-                                continue
-                            
-                            # Check duplicates by PO # OR Requisition Number
-                            if po_num in existing_pos:
-                                skipped_count += 1
-                                skipped_details.append(f"PO {po_num} (duplicate PO#)")
-                                continue
-                            
-                            if req_num in existing_reqs:
-                                skipped_count += 1
-                                skipped_details.append(f"PO {po_num} (Req# {req_num} exists)")
-                                continue
-                            
-                            req_id = gen_req_id(df_orders)
-                            
-                            created_date = row.get('Created Date/Time', '')
-                            if pd.notna(created_date):
-                                try:
-                                    if isinstance(created_date, str):
-                                        created_date = created_date.split(' ')[0]
-                                    else:
-                                        created_date = created_date.strftime('%Y-%m-%d')
-                                except:
-                                    created_date = datetime.now().strftime('%Y-%m-%d')
-                            else:
-                                created_date = datetime.now().strftime('%Y-%m-%d')
-                            
-                            total_amount = row.get('Total Amount', 0)
-                            if pd.isna(total_amount):
-                                total_amount = 0
-                            
-                            new_row = {
-                                "REQ#": req_id,
-                                "ITEM": f"[Import - add item details]",
-                                "NUMBER OF ITEM": 1,
-                                "AMOUNT PER ITEM": float(total_amount),
-                                "TOTAL": float(total_amount),
-                                "VENDOR": str(row.get('Supplier', '')),
-                                "CAT #": "",
-                                "GRANT USED": "",
-                                "PO SOURCE": "ShopBlue",
-                                "PO #": po_num,
-                                "NOTES": f"Requisition: {req_num}. Status: {row.get('PO Status', '')}",
-                                "ORDERED BY": str(row.get('PO Owner', '')),
-                                "DATE ORDERED": created_date,
-                                "DATE RECEIVED": "",
-                                "RECEIVED BY": "",
-                                "ITEM LOCATION": "",
-                                "LAB": lab_name,
-                            }
-                            
-                            df_orders = pd.concat([df_orders, pd.DataFrame([new_row])], ignore_index=True)
-                            existing_pos.add(po_num)
-                            existing_reqs.add(req_num)
-                            imported_count += 1
+                            if po_num in existing_pos or req_num in existing_reqs:
+                                dup_count += 1
                         
-                        if imported_count > 0:
-                            save_orders(df_orders)
-                            st.success(f"Imported {imported_count} purchase orders")
+                        new_count = len(df_import) - dup_count
                         
-                        if skipped_count > 0:
-                            st.warning(f"Skipped {skipped_count} duplicates:")
-                            for detail in skipped_details[:10]:
-                                st.caption(f"  - {detail}")
-                            if len(skipped_details) > 10:
-                                st.caption(f"  ... and {len(skipped_details) - 10} more")
+                        st.markdown(f"""
+                            <div style="display: flex; gap: 1rem; margin-bottom: 1rem;">
+                                <div style="flex: 1; background: #ecfdf5; padding: 1rem; border-radius: 8px; text-align: center;">
+                                    <div style="font-size: 1.5rem; font-weight: 700; color: #059669;">{new_count}</div>
+                                    <div style="font-size: 0.875rem; color: #065f46;">New Orders</div>
+                                </div>
+                                <div style="flex: 1; background: #fef3c7; padding: 1rem; border-radius: 8px; text-align: center;">
+                                    <div style="font-size: 1.5rem; font-weight: 700; color: #d97706;">{dup_count}</div>
+                                    <div style="font-size: 0.875rem; color: #92400e;">Duplicates (will skip)</div>
+                                </div>
+                            </div>
+                        """, unsafe_allow_html=True)
                         
-                        if imported_count == 0 and skipped_count == 0:
-                            st.info("No orders to import")
-            
-            except Exception as e:
-                st.error(f"Error reading file: {str(e)}")
-    
-    else:  # Accounts & Expenses / Inventory File
-        st.markdown("""
-        **Upload your lab tracking spreadsheet** (Accounts & Expenses or Inventory file)
-        
-        Expected columns: Req#, Item, #, Amount, Total, Vendor (optional)
-        """)
-        
-        uploaded_file = st.file_uploader(
-            "Upload Excel file (.xlsx)", 
-            type=["xlsx"],
-            key="inventory_upload"
-        )
-        
-        if uploaded_file is not None:
-            try:
-                xl = pd.ExcelFile(uploaded_file)
-                
-                if len(xl.sheet_names) > 1:
-                    selected_sheet = st.selectbox("Select sheet to import:", xl.sheet_names)
-                else:
-                    selected_sheet = xl.sheet_names[0]
-                
-                df_import = pd.read_excel(xl, sheet_name=selected_sheet)
-                
-                # Clean column names
-                df_import.columns = df_import.columns.str.strip()
-                
-                # Check for expected columns
-                if 'Req#' not in df_import.columns and 'Item' not in df_import.columns:
-                    st.error("Could not find expected columns (Req#, Item). Please check your file format.")
-                else:
-                    # Clean up data
-                    df_import = df_import.dropna(subset=['Item'] if 'Item' in df_import.columns else df_import.columns[0:1])
-                    df_import = df_import[df_import['Item'].astype(str).str.len() > 2]  # Remove empty/short rows
-                    
-                    st.success(f"Found {len(df_import)} items in sheet '{selected_sheet}'")
-                    
-                    st.dataframe(df_import.head(10), use_container_width=True)
-                    
-                    if len(df_import) > 10:
-                        st.caption(f"Showing 10 of {len(df_import)} records")
-                    
-                    # Grant field for this import
-                    grant_for_import = st.text_input(
-                        "Grant/Fund for these orders (optional):",
-                        value=selected_sheet if selected_sheet not in ['Sheet1', 'Sheet2'] else "",
-                        help="This will be applied to all imported orders from this sheet"
-                    )
-                    
-                    st.markdown("---")
-                    
-                    if st.button("Import Orders", type="primary", key="import_inventory"):
-                        df_orders = load_orders()
-                        
-                        # Build set of existing Req#s for duplicate checking
-                        existing_reqs = set()
-                        if not df_orders.empty and 'REQ#' in df_orders.columns:
-                            existing_reqs = set(df_orders['REQ#'].astype(str).values)
-                        
-                        # Also check NOTES for Requisition numbers
-                        if not df_orders.empty and 'NOTES' in df_orders.columns:
-                            for note in df_orders['NOTES'].astype(str).values:
-                                if 'Requisition:' in note:
+                        if st.button("Import Orders", type="primary", use_container_width=True):
+                            imported_count = 0
+                            skipped_count = 0
+                            
+                            for _, row in df_import.iterrows():
+                                po_num = str(row.get('PO Number', ''))
+                                req_num = str(row.get('Requisition Number', ''))
+                                
+                                if po_num in existing_pos or req_num in existing_reqs:
+                                    skipped_count += 1
+                                    continue
+                                
+                                req_id = gen_req_id(df_orders)
+                                
+                                created_date = row.get('Created Date/Time', '')
+                                if pd.notna(created_date):
                                     try:
-                                        req_num = note.split('Requisition:')[1].split('.')[0].strip()
-                                        existing_reqs.add(req_num)
+                                        created_date = created_date.strftime('%Y-%m-%d') if hasattr(created_date, 'strftime') else str(created_date).split(' ')[0]
                                     except:
-                                        pass
-                        
-                        # Check original Req# field too
-                        if not df_orders.empty and 'NOTES' in df_orders.columns:
-                            for note in df_orders['NOTES'].astype(str).values:
-                                if 'Original Req#:' in note:
-                                    try:
-                                        orig_req = note.split('Original Req#:')[1].split('.')[0].strip()
-                                        existing_reqs.add(orig_req)
-                                    except:
-                                        pass
-                        
-                        imported_count = 0
-                        skipped_count = 0
-                        
-                        for _, row in df_import.iterrows():
-                            # Get original Req# from source file
-                            orig_req = str(row.get('Req#', '')).replace('\xa0', '').replace('?', '').strip()
-                            
-                            # Skip invalid entries
-                            if orig_req in ['*', '', 'nan', 'None'] or len(orig_req) < 3:
-                                orig_req = ""
-                            
-                            # Check for duplicates
-                            if orig_req and orig_req in existing_reqs:
-                                skipped_count += 1
-                                continue
-                            
-                            item_name = str(row.get('Item', ''))
-                            if not item_name or item_name == 'nan' or len(item_name) < 2:
-                                continue
-                            
-                            req_id = gen_req_id(df_orders)
-                            
-                            # Parse quantity
-                            qty_raw = row.get('#', 1)
-                            try:
-                                if isinstance(qty_raw, str):
-                                    qty = float(''.join(filter(lambda x: x.isdigit() or x == '.', qty_raw))) or 1
+                                        created_date = datetime.now().strftime('%Y-%m-%d')
                                 else:
-                                    qty = float(qty_raw) if pd.notna(qty_raw) else 1
-                            except:
-                                qty = 1
+                                    created_date = datetime.now().strftime('%Y-%m-%d')
+                                
+                                total_amount = float(row.get('Total Amount', 0)) if pd.notna(row.get('Total Amount')) else 0
+                                
+                                new_row = {
+                                    "REQ#": req_id,
+                                    "ITEM": "[Add item details]",
+                                    "NUMBER OF ITEM": 1,
+                                    "AMOUNT PER ITEM": total_amount,
+                                    "TOTAL": total_amount,
+                                    "VENDOR": str(row.get('Supplier', '')),
+                                    "CAT #": "",
+                                    "GRANT USED": "",
+                                    "PO SOURCE": "ShopBlue",
+                                    "PO #": po_num,
+                                    "NOTES": f"Requisition: {req_num}. Status: {row.get('PO Status', '')}. Shipment: {row.get('Shipment Status', '')}",
+                                    "ORDERED BY": str(row.get('PO Owner', '')),
+                                    "DATE ORDERED": created_date,
+                                    "DATE RECEIVED": "",
+                                    "RECEIVED BY": "",
+                                    "ITEM LOCATION": "",
+                                    "LAB": lab_name,
+                                }
+                                
+                                df_orders = pd.concat([df_orders, pd.DataFrame([new_row])], ignore_index=True)
+                                existing_pos.add(po_num)
+                                existing_reqs.add(req_num)
+                                imported_count += 1
                             
-                            # Parse amount
-                            amount_raw = row.get('Amount', 0)
-                            try:
-                                amount = float(amount_raw) if pd.notna(amount_raw) else 0
-                            except:
-                                amount = 0
+                            if imported_count > 0:
+                                save_orders(df_orders)
+                                st.success(f"Successfully imported {imported_count} orders")
+                                st.info("Go to 'All Orders' tab to add item details to imported orders")
                             
-                            # Parse total
-                            total_raw = row.get('Total', 0)
-                            try:
-                                total = float(total_raw) if pd.notna(total_raw) else (qty * amount)
-                            except:
-                                total = qty * amount
-                            
-                            # Get vendor if available
-                            vendor = str(row.get('Vendor', '')) if 'Vendor' in row else ''
-                            if vendor == 'nan':
-                                vendor = ''
-                            
-                            new_row = {
-                                "REQ#": req_id,
-                                "ITEM": item_name[:200],  # Truncate long names
-                                "NUMBER OF ITEM": qty,
-                                "AMOUNT PER ITEM": amount,
-                                "TOTAL": total,
-                                "VENDOR": vendor,
-                                "CAT #": "",
-                                "GRANT USED": grant_for_import,
-                                "PO SOURCE": "ShopBlue",
-                                "PO #": "",
-                                "NOTES": f"Original Req#: {orig_req}. Imported from {selected_sheet}." if orig_req else f"Imported from {selected_sheet}.",
-                                "ORDERED BY": "",
-                                "DATE ORDERED": "",
-                                "DATE RECEIVED": "",
-                                "RECEIVED BY": "",
-                                "ITEM LOCATION": "",
-                                "LAB": lab_name,
-                            }
-                            
-                            df_orders = pd.concat([df_orders, pd.DataFrame([new_row])], ignore_index=True)
-                            if orig_req:
-                                existing_reqs.add(orig_req)
-                            imported_count += 1
-                        
-                        if imported_count > 0:
-                            save_orders(df_orders)
-                            st.success(f"Imported {imported_count} orders")
-                        
-                        if skipped_count > 0:
-                            st.warning(f"Skipped {skipped_count} duplicates (Req# already exists)")
-                        
-                        if imported_count == 0 and skipped_count == 0:
-                            st.info("No valid orders found to import")
+                            if skipped_count > 0:
+                                st.warning(f"Skipped {skipped_count} duplicates")
+                
+                except Exception as e:
+                    st.error(f"Error reading file: {str(e)}")
+        
+        else:  # Lab Inventory file
+            st.markdown("""
+                <div class="info-box">
+                    <strong>Expected format:</strong> Excel file with columns: Req#, Item, #, Amount, Total, Vendor (optional)
+                </div>
+            """, unsafe_allow_html=True)
             
-            except Exception as e:
-                st.error(f"Error reading file: {str(e)}")
-                st.info("Make sure your file has columns: Req#, Item, #, Amount, Total")
-    
-    st.markdown("---")
-    st.markdown("**Duplicate Detection:**")
-    st.markdown("""
-    The system checks for duplicates by:
-    - PO Number (for ShopBlue imports)
-    - Requisition Number (stored in notes)
-    - Original Req# (for Accounts/Inventory imports)
-    
-    Orders that already exist will be skipped automatically.
-    """)
+            uploaded_file = st.file_uploader("Upload Inventory/Accounts File", type=["xlsx"], key="inventory_upload")
+            
+            if uploaded_file is not None:
+                try:
+                    xl = pd.ExcelFile(uploaded_file)
+                    
+                    if len(xl.sheet_names) > 1:
+                        selected_sheet = st.selectbox("Select sheet:", xl.sheet_names)
+                    else:
+                        selected_sheet = xl.sheet_names[0]
+                    
+                    df_import = pd.read_excel(xl, sheet_name=selected_sheet)
+                    df_import.columns = df_import.columns.str.strip()
+                    
+                    if 'Item' in df_import.columns:
+                        df_import = df_import.dropna(subset=['Item'])
+                        df_import = df_import[df_import['Item'].astype(str).str.len() > 2]
+                        
+                        st.success(f"Found {len(df_import)} items")
+                        st.dataframe(df_import.head(10), use_container_width=True)
+                        
+                        grant_for_import = st.text_input("Grant for these orders:", value=selected_sheet if selected_sheet not in ['Sheet1'] else "")
+                        
+                        if st.button("Import Orders", type="primary", key="import_inv", use_container_width=True):
+                            df_orders = load_orders()
+                            
+                            existing_reqs = set()
+                            if not df_orders.empty and 'NOTES' in df_orders.columns:
+                                for note in df_orders['NOTES'].astype(str).values:
+                                    if 'Original Req#:' in note:
+                                        try:
+                                            orig = note.split('Original Req#:')[1].split('.')[0].strip()
+                                            existing_reqs.add(orig)
+                                        except:
+                                            pass
+                            
+                            imported_count = 0
+                            skipped_count = 0
+                            
+                            for _, row in df_import.iterrows():
+                                orig_req = str(row.get('Req#', '')).replace('\xa0', '').strip()
+                                
+                                if orig_req and orig_req not in ['*', 'nan'] and orig_req in existing_reqs:
+                                    skipped_count += 1
+                                    continue
+                                
+                                item_name = str(row.get('Item', ''))
+                                if not item_name or len(item_name) < 2:
+                                    continue
+                                
+                                req_id = gen_req_id(df_orders)
+                                
+                                try:
+                                    qty = float(str(row.get('#', 1)).replace('EA', '').replace('CS', '').strip() or 1)
+                                except:
+                                    qty = 1
+                                
+                                try:
+                                    amount = float(row.get('Amount', 0)) if pd.notna(row.get('Amount')) else 0
+                                except:
+                                    amount = 0
+                                
+                                try:
+                                    total = float(row.get('Total', 0)) if pd.notna(row.get('Total')) else qty * amount
+                                except:
+                                    total = qty * amount
+                                
+                                vendor = str(row.get('Vendor', '')) if 'Vendor' in row and pd.notna(row.get('Vendor')) else ''
+                                
+                                new_row = {
+                                    "REQ#": req_id,
+                                    "ITEM": item_name[:200],
+                                    "NUMBER OF ITEM": qty,
+                                    "AMOUNT PER ITEM": amount,
+                                    "TOTAL": total,
+                                    "VENDOR": vendor,
+                                    "CAT #": "",
+                                    "GRANT USED": grant_for_import,
+                                    "PO SOURCE": "ShopBlue",
+                                    "PO #": "",
+                                    "NOTES": f"Original Req#: {orig_req}" if orig_req and orig_req not in ['*', 'nan'] else "",
+                                    "ORDERED BY": "",
+                                    "DATE ORDERED": "",
+                                    "DATE RECEIVED": "",
+                                    "RECEIVED BY": "",
+                                    "ITEM LOCATION": "",
+                                    "LAB": lab_name,
+                                }
+                                
+                                df_orders = pd.concat([df_orders, pd.DataFrame([new_row])], ignore_index=True)
+                                if orig_req and orig_req not in ['*', 'nan']:
+                                    existing_reqs.add(orig_req)
+                                imported_count += 1
+                            
+                            if imported_count > 0:
+                                save_orders(df_orders)
+                                st.success(f"Imported {imported_count} orders")
+                            
+                            if skipped_count > 0:
+                                st.warning(f"Skipped {skipped_count} duplicates")
+                    else:
+                        st.error("Could not find 'Item' column")
+                
+                except Exception as e:
+                    st.error(f"Error: {str(e)}")
 
-# TAB 3: Orders Table
+# ============== TAB: All Orders ==============
 with tab_table:
-    st.subheader("Orders Table")
+    section_header("All Orders")
     
     df = load_orders()
     df = filter_by_lab(df, user_email)
@@ -699,95 +1098,76 @@ with tab_table:
             df[col] = ""
     
     df = generate_alert_column(df)
-
-    # Filters
-    st.markdown("**Filters**")
-    c1, c2, c3, c4 = st.columns(4)
     
-    with c1:
-        vendor_filter = st.text_input("Filter by Vendor", key="filter_vendor", placeholder="Type vendor name...")
-    with c2:
-        grant_filter = st.text_input("Filter by Grant", key="filter_grant", placeholder="Type grant number...")
-    with c3:
-        po_source_filter = st.selectbox("PO Source", ["All", "ShopBlue", "Stock Room", "External Vendor"], key="filter_po")
-    with c4:
-        status_filter = st.selectbox("Status", ["All", "Pending", "Received"], key="filter_status")
-
+    # Filters in a clean row
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        vendor_filter = st.text_input("Vendor", placeholder="Filter...")
+    with col2:
+        grant_filter = st.text_input("Grant", placeholder="Filter...")
+    with col3:
+        po_source_filter = st.selectbox("Source", ["All", "ShopBlue", "Stock Room", "External Vendor"])
+    with col4:
+        status_filter = st.selectbox("Status", ["All", "Pending", "Received"])
+    
     # Apply filters
     filtered = df.copy()
     
     if vendor_filter:
         filtered = filtered[filtered["VENDOR"].astype(str).str.contains(vendor_filter, case=False, na=False)]
-    
     if grant_filter:
         filtered = filtered[filtered["GRANT USED"].astype(str).str.contains(grant_filter, case=False, na=False)]
-    
     if po_source_filter != "All":
         filtered = filtered[filtered["PO SOURCE"] == po_source_filter]
-    
     if status_filter == "Pending":
         filtered = filtered[(filtered["DATE RECEIVED"].isna()) | (filtered["DATE RECEIVED"] == "")]
     elif status_filter == "Received":
         filtered = filtered[(filtered["DATE RECEIVED"].notna()) & (filtered["DATE RECEIVED"] != "")]
-
-    st.markdown(f"**Showing {len(filtered)} of {len(df)} orders**")
+    
+    st.caption(f"Showing {len(filtered)} of {len(df)} orders")
     
     if not filtered.empty:
-        display_columns = [col for col in ["REQ#", "ITEM", "VENDOR", "TOTAL", "PO #", "DATE ORDERED", "ALERT"] if col in filtered.columns]
-        st.dataframe(filtered[display_columns], use_container_width=True, height=400)
+        display_cols = ["REQ#", "ITEM", "VENDOR", "TOTAL", "PO #", "DATE ORDERED", "ALERT"]
+        display_cols = [c for c in display_cols if c in filtered.columns]
+        st.dataframe(filtered[display_cols], use_container_width=True, height=400)
         
-        # Pending items
-        overdue = filter_unreceived_orders(filtered)
-        if not overdue.empty:
-            st.warning(f"{len(overdue)} items pending receipt")
-            with st.expander("View Pending Items"):
-                pending_display = [col for col in ["REQ#", "ITEM", "VENDOR", "PO #", "DATE ORDERED"] if col in overdue.columns]
-                st.dataframe(overdue[pending_display], use_container_width=True)
-        else:
-            st.success("All items have been marked as received")
-        
-        # Edit Section
-        st.markdown("---")
-        st.markdown("**Edit Order**")
-        st.caption("Select an order to update item details or mark as received")
+        # Edit section
+        st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+        section_header("Edit Order")
         
         req_options = filtered["REQ#"].tolist()
-        selected_req = st.selectbox("Select Order (REQ#)", [""] + req_options, key="edit_select")
+        selected_req = st.selectbox("Select order to edit:", [""] + req_options)
         
         if selected_req:
             order_row = filtered[filtered["REQ#"] == selected_req].iloc[0]
             
-            with st.form(key="edit_form"):
+            with st.form("edit_form"):
                 col1, col2 = st.columns(2)
                 
                 with col1:
-                    edit_item = st.text_input("ITEM", value=str(order_row.get("ITEM", "")), key="edit_item")
-                    edit_cat = st.text_input("CAT #", value=str(order_row.get("CAT #", "")), key="edit_cat")
-                    edit_grant = st.text_input("GRANT USED", value=str(order_row.get("GRANT USED", "")), key="edit_grant")
-                    edit_qty = st.number_input("NUMBER OF ITEMS", value=float(order_row.get("NUMBER OF ITEM", 1)), min_value=0.0, key="edit_qty")
-                    edit_unit = st.number_input("AMOUNT PER ITEM", value=float(order_row.get("AMOUNT PER ITEM", 0)), min_value=0.0, format="%.2f", key="edit_unit")
+                    edit_item = st.text_input("Item", value=str(order_row.get("ITEM", "")))
+                    edit_cat = st.text_input("Catalog #", value=str(order_row.get("CAT #", "")))
+                    edit_grant = st.text_input("Grant", value=str(order_row.get("GRANT USED", "")))
+                    edit_qty = st.number_input("Quantity", value=float(order_row.get("NUMBER OF ITEM", 1)))
+                    edit_unit = st.number_input("Unit Price", value=float(order_row.get("AMOUNT PER ITEM", 0)), format="%.2f")
                 
                 with col2:
-                    edit_notes = st.text_area("NOTES", value=str(order_row.get("NOTES", "")), key="edit_notes")
-                    edit_location = st.text_input("ITEM LOCATION", value=str(order_row.get("ITEM LOCATION", "")), key="edit_location")
+                    edit_notes = st.text_area("Notes", value=str(order_row.get("NOTES", "")))
+                    edit_location = st.text_input("Location", value=str(order_row.get("ITEM LOCATION", "")))
                     
-                    st.markdown("**Receipt Information**")
                     current_received = order_row.get("DATE RECEIVED", "")
                     is_received = pd.notna(current_received) and current_received != ""
-                    
-                    mark_received = st.checkbox("Mark as Received", value=is_received, key="edit_received")
+                    mark_received = st.checkbox("Received", value=is_received)
                     
                     if mark_received:
-                        edit_date_received = st.date_input("Date Received", value=date.today(), key="edit_date_recv")
-                        edit_received_by = st.text_input("Received By", value=str(order_row.get("RECEIVED BY", "")), key="edit_recv_by")
+                        edit_date_recv = st.date_input("Date Received", value=date.today())
+                        edit_recv_by = st.text_input("Received By", value=str(order_row.get("RECEIVED BY", "")))
                     else:
-                        edit_date_received = None
-                        edit_received_by = ""
+                        edit_date_recv = None
+                        edit_recv_by = ""
                 
-                submitted = st.form_submit_button("Save Changes", type="primary")
-                
-                if submitted:
-                    # Update the order
+                if st.form_submit_button("Save Changes", type="primary"):
                     df_all = load_orders()
                     idx = df_all[df_all["REQ#"] == selected_req].index
                     
@@ -801,258 +1181,162 @@ with tab_table:
                         df_all.loc[idx, "NOTES"] = edit_notes
                         df_all.loc[idx, "ITEM LOCATION"] = edit_location
                         
-                        if mark_received and edit_date_received:
-                            df_all.loc[idx, "DATE RECEIVED"] = edit_date_received.isoformat()
-                            df_all.loc[idx, "RECEIVED BY"] = edit_received_by
-                        elif not mark_received:
+                        if mark_received and edit_date_recv:
+                            df_all.loc[idx, "DATE RECEIVED"] = edit_date_recv.isoformat()
+                            df_all.loc[idx, "RECEIVED BY"] = edit_recv_by
+                        else:
                             df_all.loc[idx, "DATE RECEIVED"] = ""
                             df_all.loc[idx, "RECEIVED BY"] = ""
                         
                         save_orders(df_all)
-                        st.success(f"Order {selected_req} updated successfully")
+                        st.success("Order updated")
                         st.rerun()
     else:
-        st.info("No orders match your filters.")
+        st.info("No orders found")
 
-# TAB 4: Analytics
+# ============== TAB: Analytics ==============
 with tab_analytics:
-    st.subheader("Analytics Dashboard")
+    section_header("Analytics")
     
     df = load_orders()
     df = filter_by_lab(df, user_email)
     
-    for col in REQUIRED_COLUMNS:
-        if col not in df.columns:
-            df[col] = ""
-
-    if not df.empty and "ITEM" in df.columns:
+    if df.empty:
+        st.info("Add orders to see analytics")
+    else:
+        # Metrics
         col1, col2, col3, col4 = st.columns(4)
         
         with col1:
-            total_orders = len(df)
-            st.metric("Total Orders", f"{total_orders:,}")
-        
+            metric_card("Total Orders", f"{len(df):,}")
         with col2:
-            if "TOTAL" in df.columns:
-                total_spending = df["TOTAL"].sum()
-                st.metric("Total Spending", f"${total_spending:,.2f}")
-        
+            metric_card("Total Spent", f"${df['TOTAL'].sum():,.2f}" if 'TOTAL' in df.columns else "$0")
         with col3:
-            pending = len(df[(df["DATE RECEIVED"].isna()) | (df["DATE RECEIVED"] == "")])
-            st.metric("Pending Items", pending)
-        
+            metric_card("Vendors", f"{df['VENDOR'].nunique()}" if 'VENDOR' in df.columns else "0")
         with col4:
-            unique_vendors = df["VENDOR"].nunique()
-            st.metric("Unique Vendors", unique_vendors)
+            pending = len(df[(df["DATE RECEIVED"].isna()) | (df["DATE RECEIVED"] == "")])
+            metric_card("Pending", str(pending), "warning" if pending > 5 else "success")
         
-        st.markdown("---")
+        st.markdown("<br>", unsafe_allow_html=True)
         
-        col_chart1, col_chart2 = st.columns(2)
+        # Charts
+        col1, col2 = st.columns(2)
         
-        with col_chart1:
-            st.markdown("**Top 10 Ordered Items**")
-            counts = df["ITEM"].value_counts().head(10)
-            fig, ax = plt.subplots(figsize=(8, 5))
-            counts.plot(kind="barh", ax=ax, color="#1f77b4")
-            ax.set_xlabel("Number of Orders")
-            ax.set_ylabel("Item")
-            ax.set_title("Most Frequently Ordered Items")
-            plt.tight_layout()
-            st.pyplot(fig)
-        
-        with col_chart2:
-            st.markdown("**Top 5 Vendors by Orders**")
-            if "VENDOR" in df.columns:
-                vendor_counts = df["VENDOR"].value_counts().head(5)
+        with col1:
+            st.markdown("**Top Items by Order Count**")
+            if "ITEM" in df.columns:
+                counts = df["ITEM"].value_counts().head(8)
                 fig, ax = plt.subplots(figsize=(8, 5))
-                vendor_counts.plot(kind="bar", ax=ax, color="#2ca02c")
-                ax.set_xlabel("Vendor")
-                ax.set_ylabel("Number of Orders")
-                ax.set_title("Most Used Vendors")
-                ax.tick_params(axis='x', rotation=45)
+                counts.plot(kind="barh", ax=ax, color="#1e3a5f")
+                ax.set_xlabel("Orders")
+                ax.spines['top'].set_visible(False)
+                ax.spines['right'].set_visible(False)
                 plt.tight_layout()
                 st.pyplot(fig)
-    else:
-        st.info("No data available yet. Add orders to see analytics.")
-
-# TAB 5: ML Insights
-with tab_ml_insights:
-    st.subheader("ML Insights")
-    st.caption("Predictive analytics and anomaly detection")
-    
-    df = load_orders()
-    df = filter_by_lab(df, user_email)
-    
-    if df.empty or len(df) < 10:
-        st.info("Need at least 10 orders to generate ML predictions.")
-        st.markdown("""
-        **Available Features:**
-        - Predictive reordering based on usage patterns
-        - Spending forecasts for budget planning
-        - Anomaly detection for unusual orders
-        - Vendor recommendations based on history
-        - Bulk order optimization opportunities
-        """)
-    else:
-        ml_tab1, ml_tab2, ml_tab3, ml_tab4 = st.tabs([
-            "Reorder Predictions",
-            "Spending Forecast", 
-            "Anomaly Detection",
-            "Recommendations"
-        ])
         
-        with ml_tab1:
-            st.markdown("**Predictive Reordering**")
-            st.write("Items that may need reordering soon based on usage patterns:")
-            
-            try:
-                reorder_predictions = predict_reorder_date(df)
-                if not reorder_predictions.empty:
-                    st.dataframe(reorder_predictions, use_container_width=True)
-                else:
-                    st.info("No reorder predictions available. Need more historical data.")
-            except Exception as e:
-                st.error(f"Error generating predictions: {e}")
+        with col2:
+            st.markdown("**Top Vendors**")
+            if "VENDOR" in df.columns:
+                vendor_counts = df["VENDOR"].value_counts().head(8)
+                fig, ax = plt.subplots(figsize=(8, 5))
+                vendor_counts.plot(kind="barh", ax=ax, color="#059669")
+                ax.set_xlabel("Orders")
+                ax.spines['top'].set_visible(False)
+                ax.spines['right'].set_visible(False)
+                plt.tight_layout()
+                st.pyplot(fig)
         
-        with ml_tab2:
-            st.markdown("**Spending Forecast**")
-            
-            forecast_months = st.slider("Forecast period (months)", 1, 12, 3, key="forecast_slider")
-            
-            try:
-                spending_forecast = forecast_spending(df, months=forecast_months)
-                
-                if spending_forecast:
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.metric("Predicted Spending", f"${spending_forecast['total_forecast']:,.2f}")
-                    with col2:
-                        st.metric("Average Monthly", f"${spending_forecast['monthly_avg']:,.2f}")
-                    
-                    fig, ax = plt.subplots(figsize=(10, 4))
-                    ax.plot(spending_forecast['dates'], spending_forecast['amounts'], marker='o', linewidth=2)
-                    ax.set_xlabel("Month")
-                    ax.set_ylabel("Predicted Spending ($)")
-                    ax.set_title(f"Spending Forecast - Next {forecast_months} Months")
-                    ax.grid(True, alpha=0.3)
-                    plt.xticks(rotation=45)
-                    plt.tight_layout()
-                    st.pyplot(fig)
-                    
-                    if 'by_grant' in spending_forecast:
-                        st.markdown("**Spending by Grant**")
-                        grant_df = pd.DataFrame(spending_forecast['by_grant'].items(), columns=['Grant', 'Predicted Amount'])
-                        grant_df['Predicted Amount'] = grant_df['Predicted Amount'].apply(lambda x: f"${x:,.2f}")
-                        st.dataframe(grant_df, use_container_width=True)
-                else:
-                    st.info("Unable to generate forecast. Need more historical data.")
-            except Exception as e:
-                st.error(f"Error generating forecast: {e}")
-        
-        with ml_tab3:
-            st.markdown("**Anomaly Detection**")
-            st.write("Orders flagged as unusual:")
-            
-            try:
-                anomalies = detect_anomalies(df)
-                if not anomalies.empty:
-                    st.warning(f"Found {len(anomalies)} potential anomalies")
-                    display_cols = [col for col in ['REQ#', 'ITEM', 'VENDOR', 'TOTAL', 'ANOMALY_SCORE'] if col in anomalies.columns]
-                    st.dataframe(anomalies[display_cols], use_container_width=True)
-                    st.caption("Anomalies may indicate data entry errors, unusual bulk orders, or price changes")
-                else:
-                    st.success("No anomalies detected. All orders appear normal.")
-            except Exception as e:
-                st.error(f"Error detecting anomalies: {e}")
-        
-        with ml_tab4:
-            st.markdown("**Recommendations**")
+        # ML Insights
+        if len(df) >= 10:
+            st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+            section_header("ML Insights")
             
             col1, col2 = st.columns(2)
             
             with col1:
-                st.markdown("**Recommended Vendors**")
+                st.markdown("**Reorder Predictions**")
                 try:
-                    vendor_recs = recommend_vendors(df)
-                    if vendor_recs:
-                        for item, vendors in list(vendor_recs.items())[:5]:
-                            st.markdown(f"**{item}**")
-                            st.markdown(f"Suggested: {', '.join(vendors)}")
-                            st.markdown("---")
+                    predictions = predict_reorder_date(df)
+                    if not predictions.empty:
+                        st.dataframe(predictions.head(5), use_container_width=True)
                     else:
-                        st.info("Need more order history for vendor recommendations")
-                except Exception as e:
-                    st.error(f"Error: {e}")
+                        st.caption("Not enough data")
+                except:
+                    st.caption("Unable to generate predictions")
             
             with col2:
-                st.markdown("**Bulk Order Opportunities**")
+                st.markdown("**Anomaly Detection**")
                 try:
-                    bulk_opps = get_bulk_opportunities(df)
-                    if bulk_opps:
-                        for item, data in list(bulk_opps.items())[:5]:
-                            st.markdown(f"**{item}**")
-                            st.markdown(f"Suggested: {data['suggested_qty']} units")
-                            st.markdown(f"Potential savings: ${data['potential_savings']:.2f}")
-                            st.markdown("---")
+                    anomalies = detect_anomalies(df)
+                    if not anomalies.empty:
+                        st.warning(f"{len(anomalies)} unusual orders detected")
+                        st.dataframe(anomalies.head(5), use_container_width=True)
                     else:
-                        st.info("No bulk opportunities identified yet")
-                except Exception as e:
-                    st.error(f"Error: {e}")
+                        st.success("No anomalies detected")
+                except:
+                    st.caption("Unable to run detection")
 
-# TAB 6: Export
+# ============== TAB: Export ==============
 with tab_export:
-    st.subheader("Export Data")
-    st.write("Download your order data in CSV or Excel format.")
+    section_header("Export Data")
     
     df = load_orders()
     df = filter_by_lab(df, user_email)
     
-    for col in REQUIRED_COLUMNS:
-        if col not in df.columns:
-            df[col] = ""
-    
-    df_export = df[[col for col in REQUIRED_COLUMNS if col in df.columns]]
-    
-    if not df_export.empty:
-        st.metric("Total Orders", len(df_export))
+    if df.empty:
+        st.info("No data to export")
+    else:
+        st.markdown(f"**{len(df)} orders** ready to export")
         
         col1, col2 = st.columns(2)
         
         with col1:
-            csv_bytes = df_export.to_csv(index=False).encode("utf-8")
+            st.markdown("""
+                <div style="background: white; border: 1px solid #e5e7eb; border-radius: 12px; padding: 1.5rem; text-align: center;">
+                    <div style="font-size: 2rem; margin-bottom: 0.5rem;">📄</div>
+                    <div style="font-weight: 600; margin-bottom: 0.5rem;">CSV Format</div>
+                    <div style="font-size: 0.875rem; color: #6b7280; margin-bottom: 1rem;">Compatible with Excel, Google Sheets</div>
+                </div>
+            """, unsafe_allow_html=True)
+            
+            csv_data = df.to_csv(index=False).encode('utf-8')
             st.download_button(
-                label="Download CSV",
-                data=csv_bytes,
-                file_name=f"Requiva_Orders_{datetime.now().strftime('%Y%m%d')}.csv",
-                mime="text/csv",
-                type="primary",
+                "Download CSV",
+                csv_data,
+                f"Requiva_Orders_{datetime.now().strftime('%Y%m%d')}.csv",
+                "text/csv",
                 use_container_width=True
             )
-            st.caption("CSV format - Compatible with Excel, Google Sheets")
         
         with col2:
+            st.markdown("""
+                <div style="background: white; border: 1px solid #e5e7eb; border-radius: 12px; padding: 1.5rem; text-align: center;">
+                    <div style="font-size: 2rem; margin-bottom: 0.5rem;">📊</div>
+                    <div style="font-weight: 600; margin-bottom: 0.5rem;">Excel Format</div>
+                    <div style="font-size: 0.875rem; color: #6b7280; margin-bottom: 1rem;">Formatted spreadsheet</div>
+                </div>
+            """, unsafe_allow_html=True)
+            
             output = BytesIO()
             with pd.ExcelWriter(output, engine="openpyxl") as writer:
-                df_export.to_excel(writer, sheet_name="Orders", index=False)
+                df.to_excel(writer, sheet_name="Orders", index=False)
             
             st.download_button(
-                label="Download Excel",
-                data=output.getvalue(),
-                file_name=f"Requiva_Orders_{datetime.now().strftime('%Y%m%d')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                type="secondary",
+                "Download Excel",
+                output.getvalue(),
+                f"Requiva_Orders_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True
             )
-            st.caption("Excel format - Formatted for reporting")
         
-        with st.expander("Preview Export Data"):
-            st.dataframe(df_export.head(10), use_container_width=True)
-            st.caption(f"Showing first 10 of {len(df_export)} records")
-    else:
-        st.info("No orders to export yet.")
+        with st.expander("Preview Data"):
+            st.dataframe(df.head(10), use_container_width=True)
 
 # Footer
-st.markdown("---")
-st.markdown("**Requiva** | Lab Order Management System")
-st.caption("Adelaiye-Ogala Lab | University at Buffalo")
-st.caption(f"Version 2.1 | {datetime.now().strftime('%B %Y')}")
+st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+st.markdown("""
+    <div style="text-align: center; color: #6b7280; font-size: 0.875rem;">
+        <strong>Requiva</strong> · Lab Order Management<br>
+        Adelaiye-Ogala Lab · University at Buffalo
+    </div>
+""", unsafe_allow_html=True)
