@@ -64,7 +64,7 @@ def predict_reorder_date(df: pd.DataFrame) -> pd.DataFrame:
     if not result.empty:
         result = result.sort_values('DAYS_UNTIL_REORDER')
         result['URGENCY'] = result['DAYS_UNTIL_REORDER'].apply(
-            lambda x: '🔴 Urgent' if x <= 7 else ('🟡 Soon' if x <= 30 else '🟢 Normal')
+            lambda x: 'Urgent' if x <= 7 else ('Soon' if x <= 30 else 'Normal')
         )
     
     return result
