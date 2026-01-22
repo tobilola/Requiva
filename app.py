@@ -803,10 +803,9 @@ if is_admin(user_email) and tab_import is not None:
         if import_type == "ShopBlue Export":
             st.markdown("""
                 <div class="info-box">
-                    <strong>How to export from ShopBlue:</strong><br>
-                    1. Log into ShopBlue → Click user icon → Manage Searches<br>
-                    2. Navigate to Shared → UB - ShopBlue Support<br>
-                    3. Click Export on "Purchase Orders Completed"
+                    <strong>Supported ShopBlue exports:</strong><br>
+                    • Line-item export (with Item, Quantity, Unit Price columns)<br>
+                    • PO summary export (Purchase Orders Completed)
                 </div>
             """, unsafe_allow_html=True)
             
@@ -814,143 +813,165 @@ if is_admin(user_email) and tab_import is not None:
             
             if uploaded_file is not None:
                 try:
-                    df_import = pd.read_excel(uploaded_file, header=9)
+                    # Read file with header at row 0
+                    df_import = pd.read_excel(uploaded_file, header=0)
                     
-                    expected_cols = ['PO Number', 'Supplier', 'Created Date/Time', 'Total Amount']
-                    if not all(col in df_import.columns for col in expected_cols):
-                        st.error("Invalid ShopBlue export format")
-                    else:
-                        st.success(f"Found {len(df_import)} purchase orders")
+                    # Strip whitespace from column names
+                    df_import.columns = df_import.columns.str.strip()
+                    
+                    # Check if it's the line-item format (has Item column)
+                    has_item_col = 'Item' in df_import.columns
+                    has_price_col = 'Unit Price ($)' in df_import.columns or 'Line Total ($)' in df_import.columns
+                    
+                    if has_item_col and has_price_col:
+                        # NEW FORMAT: Line-item data with quantities and prices
                         
-                        # Show relevant ShopBlue columns
-                        st.markdown("**ShopBlue Data Preview:**")
+                        # Filter to only rows with valid prices
+                        price_col = 'Unit Price ($)' if 'Unit Price ($)' in df_import.columns else 'Line Total ($)'
+                        df_import = df_import[df_import[price_col].notna() & (df_import[price_col] > 0)]
                         
-                        # Define display columns with better names
-                        shopblue_display = pd.DataFrame()
-                        shopblue_display['PO #'] = df_import['PO Number'].astype(str)
-                        shopblue_display['Requisition #'] = df_import['Requisition Number'].astype(str) if 'Requisition Number' in df_import.columns else ''
-                        shopblue_display['Vendor'] = df_import['Supplier']
-                        shopblue_display['Date'] = pd.to_datetime(df_import['Created Date/Time'], errors='coerce').dt.strftime('%Y-%m-%d')
-                        shopblue_display['Owner'] = df_import['PO Owner'] if 'PO Owner' in df_import.columns else ''
-                        shopblue_display['Status'] = df_import['PO Status'] if 'PO Status' in df_import.columns else ''
-                        shopblue_display['Shipment'] = df_import['Shipment Status'] if 'Shipment Status' in df_import.columns else ''
-                        shopblue_display['Total'] = df_import['Total Amount'].apply(lambda x: f"${x:,.2f}" if pd.notna(x) else "$0.00")
+                        st.success(f"Found {len(df_import)} line items with prices")
                         
-                        st.dataframe(shopblue_display, use_container_width=True, height=300)
+                        # Clean up item names (take just the first part before catalog codes)
+                        def clean_item_name(item_str):
+                            if pd.isna(item_str):
+                                return ""
+                            item_str = str(item_str)
+                            # Try to extract just the product name (before " - " or before catalog number patterns)
+                            # Look for patterns like "Product Name - Pkg" or "Product 123456 EA"
+                            parts = item_str.split(' - ')
+                            if len(parts) > 1:
+                                return parts[0].strip()[:100]
+                            # Otherwise take first 100 chars
+                            return item_str[:100].strip()
                         
-                        # Show what will be imported vs what needs to be added manually
+                        df_import['Item_Clean'] = df_import['Item'].apply(clean_item_name)
+                        
+                        # Show preview with cleaned names
+                        st.markdown("**Data Preview:**")
+                        preview_df = pd.DataFrame()
+                        preview_df['PO #'] = df_import['PO #'].astype(str) if 'PO #' in df_import.columns else ''
+                        preview_df['Item'] = df_import['Item_Clean']
+                        preview_df['Vendor'] = df_import['Vendor'] if 'Vendor' in df_import.columns else ''
+                        preview_df['Qty'] = df_import['Quantity'] if 'Quantity' in df_import.columns else 1
+                        preview_df['Unit Price'] = df_import['Unit Price ($)'].apply(lambda x: f"${x:,.2f}" if pd.notna(x) else "") if 'Unit Price ($)' in df_import.columns else ''
+                        preview_df['Total'] = df_import['Line Total ($)'].apply(lambda x: f"${x:,.2f}" if pd.notna(x) else "") if 'Line Total ($)' in df_import.columns else ''
+                        preview_df['Grant'] = df_import['Grant'] if 'Grant' in df_import.columns else ''
+                        
+                        st.dataframe(preview_df.head(20), use_container_width=True, height=350)
+                        
+                        if len(df_import) > 20:
+                            st.caption(f"Showing 20 of {len(df_import)} items")
+                        
+                        # Show what will be imported
                         st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
                         
-                        col1, col2 = st.columns(2)
-                        
-                        with col1:
-                            st.markdown("""
-                                <div style="background: #ecfdf5; border-radius: 8px; padding: 1rem;">
-                                    <strong style="color: #059669;">Auto-imported from ShopBlue:</strong>
-                                    <ul style="margin: 0.5rem 0 0 0; padding-left: 1.25rem; color: #065f46;">
-                                        <li>PO Number</li>
-                                        <li>Requisition Number</li>
-                                        <li>Vendor/Supplier</li>
-                                        <li>Date Ordered</li>
-                                        <li>Ordered By (PO Owner)</li>
-                                        <li>Total Amount</li>
-                                    </ul>
+                        st.markdown("""
+                            <div style="background: #ecfdf5; border-radius: 8px; padding: 1rem; margin-bottom: 1rem;">
+                                <strong style="color: #059669;">This export includes all fields for ML predictions:</strong>
+                                <div style="display: flex; gap: 2rem; margin-top: 0.5rem; color: #065f46;">
+                                    <div>• Item Name<br>• Vendor<br>• Catalog #</div>
+                                    <div>• Quantity<br>• Unit Price<br>• Line Total</div>
+                                    <div>• Grant<br>• PO #<br>• Date Ordered</div>
                                 </div>
-                            """, unsafe_allow_html=True)
+                            </div>
+                        """, unsafe_allow_html=True)
                         
-                        with col2:
-                            st.markdown("""
-                                <div style="background: #fef3c7; border-radius: 8px; padding: 1rem;">
-                                    <strong style="color: #92400e;">Needs manual entry:</strong>
-                                    <ul style="margin: 0.5rem 0 0 0; padding-left: 1.25rem; color: #78350f;">
-                                        <li>Item Name/Description</li>
-                                        <li>Catalog Number</li>
-                                        <li>Grant Used</li>
-                                        <li>Quantity & Unit Price</li>
-                                        <li>Receipt Info (when received)</li>
-                                        <li>Storage Location</li>
-                                    </ul>
-                                </div>
-                            """, unsafe_allow_html=True)
-                        
-                        st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
-                        
-                        # Check for existing duplicates
+                        # Check for duplicates
                         df_orders = load_orders()
-                        existing_pos = set(df_orders['PO #'].astype(str).values) if 'PO #' in df_orders.columns else set()
-                        existing_reqs = set()
-                        
-                        if not df_orders.empty and 'NOTES' in df_orders.columns:
-                            for note in df_orders['NOTES'].astype(str).values:
-                                if 'Requisition:' in note:
-                                    try:
-                                        req_num = note.split('Requisition:')[1].split('.')[0].strip()
-                                        existing_reqs.add(req_num)
-                                    except:
-                                        pass
+                        existing_items = set()
+                        if not df_orders.empty:
+                            for _, row in df_orders.iterrows():
+                                key = f"{row.get('PO #', '')}_{str(row.get('ITEM', ''))[:30]}"
+                                existing_items.add(key)
                         
                         # Count potential duplicates
                         dup_count = 0
                         for _, row in df_import.iterrows():
-                            po_num = str(row.get('PO Number', ''))
-                            req_num = str(row.get('Requisition Number', ''))
-                            if po_num in existing_pos or req_num in existing_reqs:
+                            key = f"{row.get('PO #', '')}_{str(row.get('Item_Clean', ''))[:30]}"
+                            if key in existing_items:
                                 dup_count += 1
                         
                         new_count = len(df_import) - dup_count
                         
-                        st.markdown(f"""
-                            <div style="display: flex; gap: 1rem; margin-bottom: 1rem;">
-                                <div style="flex: 1; background: #ecfdf5; padding: 1rem; border-radius: 8px; text-align: center;">
-                                    <div style="font-size: 1.5rem; font-weight: 700; color: #059669;">{new_count}</div>
-                                    <div style="font-size: 0.875rem; color: #065f46;">New Orders</div>
-                                </div>
-                                <div style="flex: 1; background: #fef3c7; padding: 1rem; border-radius: 8px; text-align: center;">
-                                    <div style="font-size: 1.5rem; font-weight: 700; color: #d97706;">{dup_count}</div>
-                                    <div style="font-size: 0.875rem; color: #92400e;">Duplicates (will skip)</div>
-                                </div>
-                            </div>
-                        """, unsafe_allow_html=True)
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.metric("New Items", new_count)
+                        with col2:
+                            st.metric("Duplicates (will skip)", dup_count)
                         
                         if st.button("Import Orders", type="primary", use_container_width=True):
                             imported_count = 0
                             skipped_count = 0
                             
                             for _, row in df_import.iterrows():
-                                po_num = str(row.get('PO Number', ''))
-                                req_num = str(row.get('Requisition Number', ''))
+                                item_name = str(row.get('Item_Clean', ''))
+                                if not item_name or len(item_name) < 3:
+                                    continue
                                 
-                                if po_num in existing_pos or req_num in existing_reqs:
+                                po_num = str(row.get('PO #', ''))
+                                
+                                # Check for duplicate
+                                key = f"{po_num}_{item_name[:30]}"
+                                if key in existing_items:
                                     skipped_count += 1
                                     continue
                                 
                                 req_id = gen_req_id(df_orders)
                                 
-                                created_date = row.get('Created Date/Time', '')
-                                if pd.notna(created_date):
+                                # Parse date
+                                date_ordered = row.get('Date Ordered', '')
+                                if pd.notna(date_ordered):
                                     try:
-                                        created_date = created_date.strftime('%Y-%m-%d') if hasattr(created_date, 'strftime') else str(created_date).split(' ')[0]
+                                        if hasattr(date_ordered, 'strftime'):
+                                            date_ordered = date_ordered.strftime('%Y-%m-%d')
+                                        else:
+                                            date_ordered = str(date_ordered).split(' ')[0].replace('/', '-')
                                     except:
-                                        created_date = datetime.now().strftime('%Y-%m-%d')
+                                        date_ordered = ''
                                 else:
-                                    created_date = datetime.now().strftime('%Y-%m-%d')
+                                    date_ordered = ''
                                 
-                                total_amount = float(row.get('Total Amount', 0)) if pd.notna(row.get('Total Amount')) else 0
+                                # Parse numeric fields
+                                try:
+                                    qty = float(row.get('Quantity', 1)) if pd.notna(row.get('Quantity')) else 1
+                                except:
+                                    qty = 1
+                                
+                                try:
+                                    unit_price = float(row.get('Unit Price ($)', 0)) if pd.notna(row.get('Unit Price ($)')) else 0
+                                except:
+                                    unit_price = 0
+                                
+                                try:
+                                    total = float(row.get('Line Total ($)', 0)) if pd.notna(row.get('Line Total ($)')) else qty * unit_price
+                                except:
+                                    total = qty * unit_price
+                                
+                                # Get other fields
+                                vendor = str(row.get('Vendor', ''))[:100] if pd.notna(row.get('Vendor')) else ''
+                                # Clean vendor name
+                                if 'Contract no value' in vendor:
+                                    vendor = vendor.replace('Contract no value', '').strip()
+                                
+                                grant = str(row.get('Grant', '')) if pd.notna(row.get('Grant')) else ''
+                                catalog = str(row.get('Catalog #', '')) if pd.notna(row.get('Catalog #')) else ''
+                                ordered_by = str(row.get('Ordered By', '')) if pd.notna(row.get('Ordered By')) else ''
                                 
                                 new_row = {
                                     "REQ#": req_id,
-                                    "ITEM": "[Add item details]",
-                                    "NUMBER OF ITEM": 1,
-                                    "AMOUNT PER ITEM": total_amount,
-                                    "TOTAL": total_amount,
-                                    "VENDOR": str(row.get('Supplier', '')),
-                                    "CAT #": "",
-                                    "GRANT USED": "",
+                                    "ITEM": item_name[:200],
+                                    "NUMBER OF ITEM": qty,
+                                    "AMOUNT PER ITEM": unit_price,
+                                    "TOTAL": total,
+                                    "VENDOR": vendor,
+                                    "CAT #": catalog,
+                                    "GRANT USED": grant,
                                     "PO SOURCE": "ShopBlue",
                                     "PO #": po_num,
-                                    "NOTES": f"Requisition: {req_num}. Status: {row.get('PO Status', '')}. Shipment: {row.get('Shipment Status', '')}",
-                                    "ORDERED BY": str(row.get('PO Owner', '')),
-                                    "DATE ORDERED": created_date,
+                                    "NOTES": "",
+                                    "ORDERED BY": ordered_by,
+                                    "DATE ORDERED": date_ordered,
                                     "DATE RECEIVED": "",
                                     "RECEIVED BY": "",
                                     "ITEM LOCATION": "",
@@ -958,20 +979,85 @@ if is_admin(user_email) and tab_import is not None:
                                 }
                                 
                                 df_orders = pd.concat([df_orders, pd.DataFrame([new_row])], ignore_index=True)
-                                existing_pos.add(po_num)
-                                existing_reqs.add(req_num)
+                                existing_items.add(key)
                                 imported_count += 1
                             
                             if imported_count > 0:
                                 save_orders(df_orders)
-                                st.success(f"Successfully imported {imported_count} orders")
-                                st.info("Go to 'All Orders' tab to add item details to imported orders")
+                                st.success(f"Successfully imported {imported_count} items")
+                                st.info("Data includes item details - ML predictions will now work!")
                             
                             if skipped_count > 0:
                                 st.warning(f"Skipped {skipped_count} duplicates")
+                    
+                    else:
+                        # Try OLD FORMAT: PO-level summary (header at row 9)
+                        uploaded_file.seek(0)
+                        df_import = pd.read_excel(uploaded_file, header=9)
+                        
+                        expected_cols = ['PO Number', 'Supplier', 'Total Amount']
+                        if not all(col in df_import.columns for col in expected_cols):
+                            st.error("Unrecognized file format.")
+                            st.info("Expected: Item, Quantity, Unit Price columns (line-item) OR PO Number, Supplier, Total Amount (summary)")
+                        else:
+                            st.success(f"Found {len(df_import)} purchase orders (summary format)")
+                            st.warning("This format lacks item details. ML predictions will be limited.")
+                            
+                            preview_cols = ['PO Number', 'Supplier', 'Total Amount']
+                            st.dataframe(df_import[preview_cols].head(10), use_container_width=True)
+                            
+                            df_orders = load_orders()
+                            existing_pos = set(df_orders['PO #'].astype(str).values) if 'PO #' in df_orders.columns else set()
+                            
+                            if st.button("Import Orders", type="primary", use_container_width=True):
+                                imported_count = 0
+                                skipped_count = 0
+                                
+                                for _, row in df_import.iterrows():
+                                    po_num = str(row.get('PO Number', ''))
+                                    
+                                    if po_num in existing_pos:
+                                        skipped_count += 1
+                                        continue
+                                    
+                                    req_id = gen_req_id(df_orders)
+                                    total_amount = float(row.get('Total Amount', 0)) if pd.notna(row.get('Total Amount')) else 0
+                                    
+                                    new_row = {
+                                        "REQ#": req_id,
+                                        "ITEM": "[Add item details]",
+                                        "NUMBER OF ITEM": 1,
+                                        "AMOUNT PER ITEM": total_amount,
+                                        "TOTAL": total_amount,
+                                        "VENDOR": str(row.get('Supplier', '')),
+                                        "CAT #": "",
+                                        "GRANT USED": "",
+                                        "PO SOURCE": "ShopBlue",
+                                        "PO #": po_num,
+                                        "NOTES": "",
+                                        "ORDERED BY": str(row.get('PO Owner', '')),
+                                        "DATE ORDERED": "",
+                                        "DATE RECEIVED": "",
+                                        "RECEIVED BY": "",
+                                        "ITEM LOCATION": "",
+                                        "LAB": lab_name,
+                                    }
+                                    
+                                    df_orders = pd.concat([df_orders, pd.DataFrame([new_row])], ignore_index=True)
+                                    existing_pos.add(po_num)
+                                    imported_count += 1
+                                
+                                if imported_count > 0:
+                                    save_orders(df_orders)
+                                    st.success(f"Imported {imported_count} orders")
+                                
+                                if skipped_count > 0:
+                                    st.warning(f"Skipped {skipped_count} duplicates")
                 
                 except Exception as e:
                     st.error(f"Error reading file: {str(e)}")
+                    import traceback
+                    st.code(traceback.format_exc())
         
         else:  # Lab Inventory file
             st.markdown("""
@@ -1102,6 +1188,63 @@ with tab_table:
     # Admin: Data Management
     if is_admin(user_email):
         with st.expander("Data Management (Admin)"):
+            
+            # BULK MARK AS RECEIVED
+            st.markdown("**Bulk Mark as Received**")
+            
+            pending_orders = df[(df["DATE RECEIVED"].isna()) | (df["DATE RECEIVED"] == "")]
+            
+            if len(pending_orders) == 0:
+                st.success("All orders are already marked as received")
+            else:
+                st.info(f"{len(pending_orders)} orders are pending")
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    bulk_date = st.date_input("Date Received", value=date.today(), key="bulk_recv_date")
+                
+                with col2:
+                    bulk_receiver = st.text_input("Received By", value=user_email.split('@')[0], key="bulk_recv_by")
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    if st.button("Mark ALL as Received", type="primary", use_container_width=True):
+                        df_all = load_orders()
+                        
+                        # Update all rows where DATE RECEIVED is empty
+                        mask = (df_all["DATE RECEIVED"].isna()) | (df_all["DATE RECEIVED"] == "")
+                        df_all.loc[mask, "DATE RECEIVED"] = bulk_date.isoformat()
+                        df_all.loc[mask, "RECEIVED BY"] = bulk_receiver
+                        
+                        save_orders(df_all)
+                        st.success(f"Marked {mask.sum()} orders as received")
+                        st.rerun()
+                
+                with col2:
+                    # Mark selected orders only
+                    selected_to_mark = st.multiselect(
+                        "Or select specific orders:",
+                        options=pending_orders["REQ#"].tolist(),
+                        key="select_to_mark"
+                    )
+                    
+                    if selected_to_mark and st.button("Mark Selected as Received", use_container_width=True):
+                        df_all = load_orders()
+                        
+                        for req in selected_to_mark:
+                            idx = df_all[df_all["REQ#"] == req].index
+                            if len(idx) > 0:
+                                df_all.loc[idx, "DATE RECEIVED"] = bulk_date.isoformat()
+                                df_all.loc[idx, "RECEIVED BY"] = bulk_receiver
+                        
+                        save_orders(df_all)
+                        st.success(f"Marked {len(selected_to_mark)} orders as received")
+                        st.rerun()
+            
+            st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+            
             st.markdown("**Delete Orders**")
             
             col1, col2 = st.columns(2)
