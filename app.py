@@ -607,7 +607,14 @@ with tab_dashboard:
         col1, col2, col3, col4 = st.columns(4)
         
         total_orders = len(df)
-        total_spending = df["TOTAL"].sum() if "TOTAL" in df.columns else 0
+        
+        # Safely convert TOTAL to numeric
+        if "TOTAL" in df.columns:
+            df["TOTAL"] = pd.to_numeric(df["TOTAL"], errors='coerce').fillna(0)
+            total_spending = df["TOTAL"].sum()
+        else:
+            total_spending = 0
+        
         pending = len(df[(df["DATE RECEIVED"].isna()) | (df["DATE RECEIVED"] == "")])
         received = total_orders - pending
         
@@ -1189,6 +1196,51 @@ with tab_table:
     if is_admin(user_email):
         with st.expander("Data Management (Admin)"):
             
+            # DATA REPAIR
+            st.markdown("**Data Repair**")
+            
+            # Check for issues
+            df_check = df.copy()
+            df_check["TOTAL"] = pd.to_numeric(df_check["TOTAL"], errors='coerce').fillna(0)
+            total_sum = df_check["TOTAL"].sum()
+            
+            if total_sum == 0 and len(df) > 0:
+                st.warning("TOTAL column appears empty. Click below to recalculate from AMOUNT PER ITEM × NUMBER OF ITEM")
+                
+                if st.button("Recalculate All Totals", type="primary"):
+                    df_all = load_orders()
+                    
+                    # Try to fix totals
+                    for idx in df_all.index:
+                        qty = df_all.loc[idx, "NUMBER OF ITEM"]
+                        unit = df_all.loc[idx, "AMOUNT PER ITEM"]
+                        
+                        try:
+                            qty = float(qty) if pd.notna(qty) else 1
+                            unit = float(unit) if pd.notna(unit) else 0
+                            df_all.loc[idx, "TOTAL"] = qty * unit
+                        except:
+                            df_all.loc[idx, "TOTAL"] = 0
+                    
+                    save_orders(df_all)
+                    new_total = df_all["TOTAL"].sum()
+                    st.success(f"Recalculated! New total: ${new_total:,.2f}")
+                    st.rerun()
+            
+            # Show column diagnostics
+            with st.expander("Debug: View Column Data"):
+                st.write("**Sample of numeric columns:**")
+                debug_cols = ["REQ#", "NUMBER OF ITEM", "AMOUNT PER ITEM", "TOTAL"]
+                debug_cols = [c for c in debug_cols if c in df.columns]
+                st.dataframe(df[debug_cols].head(10))
+                
+                st.write("**Column types:**")
+                for col in ["NUMBER OF ITEM", "AMOUNT PER ITEM", "TOTAL"]:
+                    if col in df.columns:
+                        st.write(f"- {col}: {df[col].dtype}, non-null: {df[col].notna().sum()}, sum: {df[col].sum()}")
+            
+            st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+            
             # BULK MARK AS RECEIVED
             st.markdown("**Bulk Mark as Received**")
             
@@ -1431,10 +1483,17 @@ with tab_analytics:
         # Metrics
         col1, col2, col3, col4 = st.columns(4)
         
+        # Safely calculate total spending
+        if 'TOTAL' in df.columns:
+            df['TOTAL'] = pd.to_numeric(df['TOTAL'], errors='coerce').fillna(0)
+            total_spending = df['TOTAL'].sum()
+        else:
+            total_spending = 0
+        
         with col1:
             metric_card("Total Orders", f"{len(df):,}")
         with col2:
-            metric_card("Total Spent", f"${df['TOTAL'].sum():,.2f}" if 'TOTAL' in df.columns else "$0")
+            metric_card("Total Spent", f"${total_spending:,.2f}")
         with col3:
             metric_card("Vendors", f"{df['VENDOR'].nunique()}" if 'VENDOR' in df.columns else "0")
         with col4:
