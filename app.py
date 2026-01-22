@@ -410,10 +410,13 @@ if not user_email:
         st.markdown('<p class="tagline">Lab Order Management System</p>', unsafe_allow_html=True)
         
         # Connection status
-        if USE_FIRESTORE:
-            st.success("Connected to database")
+        from utils import db
+        if USE_FIRESTORE and db:
+            st.success("Database connected")
+        elif USE_FIRESTORE and not db:
+            st.error("Database connection failed - check FIREBASE_JSON")
         else:
-            st.warning("Development mode (local storage)")
+            st.warning("Development mode (no database)")
         
         st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
         
@@ -436,12 +439,13 @@ if not user_email:
                     st.error("Please enter both email and password")
                 else:
                     email = email.strip().lower()
-                    from utils import hash_password, db
+                    from utils import hash_password, db, USE_FIRESTORE
                     
                     if USE_FIRESTORE and db:
                         try:
-                            user_ref = db.collection("users").document(email)
-                            user = user_ref.get(timeout=10)
+                            with st.spinner("Connecting..."):
+                                user_ref = db.collection("users").document(email)
+                                user = user_ref.get(timeout=15)
                             
                             if user.exists:
                                 user_data = user.to_dict()
@@ -452,17 +456,18 @@ if not user_email:
                                 else:
                                     st.error("Invalid password")
                             else:
-                                st.error("Account not found")
+                                st.error("Account not found. Create one below.")
                         except Exception as e:
-                            st.error("Connection failed. Please try again.")
+                            st.error(f"Connection error: {str(e)[:100]}")
+                            st.info("Check your internet connection and try again")
                     else:
-                        # Dev mode
+                        # Dev mode or Firebase not configured
                         DEV_USERS = {"test@buffalo.edu": "test123", "ogunbowaleadeola@gmail.com": "admin123"}
                         if email in DEV_USERS and DEV_USERS[email] == password:
                             st.session_state.auth_user = email
                             st.rerun()
                         else:
-                            st.error("Invalid credentials")
+                            st.error("Invalid credentials (Dev mode)")
         
         st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
         
@@ -1194,7 +1199,43 @@ with tab_table:
     
     # Admin: Data Management
     if is_admin(user_email):
-        with st.expander("Data Management (Admin)"):
+        
+        # BULK MARK AS RECEIVED - Outside expander for easy access
+        pending_orders = df[(df["DATE RECEIVED"].isna()) | (df["DATE RECEIVED"] == "")]
+        
+        if len(pending_orders) > 0:
+            st.markdown(f"""
+                <div style="background: #fef3c7; border-radius: 8px; padding: 1rem; margin-bottom: 1rem;">
+                    <strong style="color: #92400e;">{len(pending_orders)} orders pending</strong>
+                </div>
+            """, unsafe_allow_html=True)
+            
+            col1, col2, col3 = st.columns([1, 1, 1])
+            
+            with col1:
+                bulk_date = st.date_input("Date Received", value=date.today(), key="bulk_recv_date")
+            
+            with col2:
+                bulk_receiver = st.text_input("Received By", value=user_email.split('@')[0], key="bulk_recv_by")
+            
+            with col3:
+                st.write("")  # Spacer
+                st.write("")  # Spacer
+                if st.button("MARK ALL AS RECEIVED", type="primary", use_container_width=True):
+                    df_all = load_orders()
+                    
+                    # Update all rows where DATE RECEIVED is empty
+                    mask = (df_all["DATE RECEIVED"].isna()) | (df_all["DATE RECEIVED"] == "")
+                    df_all.loc[mask, "DATE RECEIVED"] = bulk_date.isoformat()
+                    df_all.loc[mask, "RECEIVED BY"] = bulk_receiver
+                    
+                    save_orders(df_all)
+                    st.success(f"Marked {mask.sum()} orders as received!")
+                    st.rerun()
+            
+            st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+        
+        with st.expander("More Admin Tools"):
             
             # DATA REPAIR
             st.markdown("**Data Repair**")
@@ -1238,62 +1279,6 @@ with tab_table:
                 for col in ["NUMBER OF ITEM", "AMOUNT PER ITEM", "TOTAL"]:
                     if col in df.columns:
                         st.write(f"- {col}: {df[col].dtype}, non-null: {df[col].notna().sum()}, sum: {df[col].sum()}")
-            
-            st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
-            
-            # BULK MARK AS RECEIVED
-            st.markdown("**Bulk Mark as Received**")
-            
-            pending_orders = df[(df["DATE RECEIVED"].isna()) | (df["DATE RECEIVED"] == "")]
-            
-            if len(pending_orders) == 0:
-                st.success("All orders are already marked as received")
-            else:
-                st.info(f"{len(pending_orders)} orders are pending")
-                
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    bulk_date = st.date_input("Date Received", value=date.today(), key="bulk_recv_date")
-                
-                with col2:
-                    bulk_receiver = st.text_input("Received By", value=user_email.split('@')[0], key="bulk_recv_by")
-                
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    if st.button("Mark ALL as Received", type="primary", use_container_width=True):
-                        df_all = load_orders()
-                        
-                        # Update all rows where DATE RECEIVED is empty
-                        mask = (df_all["DATE RECEIVED"].isna()) | (df_all["DATE RECEIVED"] == "")
-                        df_all.loc[mask, "DATE RECEIVED"] = bulk_date.isoformat()
-                        df_all.loc[mask, "RECEIVED BY"] = bulk_receiver
-                        
-                        save_orders(df_all)
-                        st.success(f"Marked {mask.sum()} orders as received")
-                        st.rerun()
-                
-                with col2:
-                    # Mark selected orders only
-                    selected_to_mark = st.multiselect(
-                        "Or select specific orders:",
-                        options=pending_orders["REQ#"].tolist(),
-                        key="select_to_mark"
-                    )
-                    
-                    if selected_to_mark and st.button("Mark Selected as Received", use_container_width=True):
-                        df_all = load_orders()
-                        
-                        for req in selected_to_mark:
-                            idx = df_all[df_all["REQ#"] == req].index
-                            if len(idx) > 0:
-                                df_all.loc[idx, "DATE RECEIVED"] = bulk_date.isoformat()
-                                df_all.loc[idx, "RECEIVED BY"] = bulk_receiver
-                        
-                        save_orders(df_all)
-                        st.success(f"Marked {len(selected_to_mark)} orders as received")
-                        st.rerun()
             
             st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
             
