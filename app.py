@@ -1099,6 +1099,87 @@ with tab_table:
     
     df = generate_alert_column(df)
     
+    # Admin: Data Management
+    if is_admin(user_email):
+        with st.expander("Data Management (Admin)"):
+            st.markdown("**Delete Orders**")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                # Delete individual order
+                if not df.empty:
+                    delete_options = df["REQ#"].tolist()
+                    order_to_delete = st.selectbox("Select order to delete:", [""] + delete_options, key="delete_single")
+                    
+                    if order_to_delete:
+                        order_info = df[df["REQ#"] == order_to_delete].iloc[0]
+                        st.caption(f"Item: {order_info.get('ITEM', 'N/A')[:50]}")
+                        st.caption(f"Vendor: {order_info.get('VENDOR', 'N/A')}")
+                        st.caption(f"Total: ${order_info.get('TOTAL', 0):,.2f}")
+                        
+                        if st.button("Delete This Order", type="secondary"):
+                            df_all = load_orders()
+                            df_all = df_all[df_all["REQ#"] != order_to_delete]
+                            save_orders(df_all)
+                            st.success(f"Deleted order {order_to_delete}")
+                            st.rerun()
+            
+            with col2:
+                # Delete all orders
+                st.markdown("**Delete All Orders**")
+                st.warning("This will permanently delete all orders from the database.")
+                
+                confirm_text = st.text_input("Type DELETE to confirm:", key="confirm_delete_all")
+                
+                if st.button("Delete All Orders", type="secondary"):
+                    if confirm_text == "DELETE":
+                        # Clear all orders
+                        empty_df = pd.DataFrame(columns=REQUIRED_COLUMNS)
+                        save_orders(empty_df)
+                        st.success("All orders deleted")
+                        st.rerun()
+                    else:
+                        st.error("Type DELETE to confirm")
+            
+            st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+            
+            # Delete by filter
+            st.markdown("**Delete Orders by Filter**")
+            
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                delete_by_vendor = st.text_input("Delete by Vendor:", placeholder="e.g., Fisher Scientific")
+            
+            with col2:
+                delete_by_po = st.text_input("Delete by PO #:", placeholder="e.g., 1481052")
+            
+            with col3:
+                delete_imported = st.checkbox("Delete all imported orders (items starting with '[')")
+            
+            if st.button("Delete Matching Orders", type="secondary"):
+                df_all = load_orders()
+                initial_count = len(df_all)
+                
+                if delete_by_vendor:
+                    df_all = df_all[~df_all["VENDOR"].astype(str).str.contains(delete_by_vendor, case=False, na=False)]
+                
+                if delete_by_po:
+                    df_all = df_all[df_all["PO #"].astype(str) != delete_by_po]
+                
+                if delete_imported:
+                    df_all = df_all[~df_all["ITEM"].astype(str).str.startswith("[")]
+                
+                deleted_count = initial_count - len(df_all)
+                
+                if deleted_count > 0:
+                    save_orders(df_all)
+                    st.success(f"Deleted {deleted_count} orders")
+                    st.rerun()
+                else:
+                    st.info("No matching orders found")
+    
     # Filters in a clean row
     col1, col2, col3, col4 = st.columns(4)
     
