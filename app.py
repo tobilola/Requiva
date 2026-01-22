@@ -390,10 +390,6 @@ def section_header(title):
 # Initialize session state
 if "auth_user" not in st.session_state:
     st.session_state.auth_user = None
-if "show_create_account" not in st.session_state:
-    st.session_state.show_create_account = False
-if "show_reset_password" not in st.session_state:
-    st.session_state.show_reset_password = False
 if "imported_pos" not in st.session_state:
     st.session_state.imported_pos = None
 
@@ -402,6 +398,13 @@ user_email = check_auth_status()
 
 # ============== LOGIN PAGE ==============
 if not user_email:
+    # Hide sidebar on login page
+    st.markdown("""
+        <style>
+            [data-testid="stSidebar"] {display: none;}
+        </style>
+    """, unsafe_allow_html=True)
+    
     # Centered login container
     col1, col2, col3 = st.columns([1, 2, 1])
     
@@ -442,24 +445,22 @@ if not user_email:
                     from utils import hash_password, db, USE_FIRESTORE
                     
                     if USE_FIRESTORE and db:
-                        try:
-                            with st.spinner("Connecting..."):
+                        with st.spinner("Signing in..."):
+                            try:
                                 user_ref = db.collection("users").document(email)
-                                user = user_ref.get(timeout=15)
-                            
-                            if user.exists:
-                                user_data = user.to_dict()
-                                if user_data.get("password") == hash_password(password):
-                                    st.session_state.auth_user = email
-                                    st.success("Login successful")
-                                    st.rerun()
+                                user = user_ref.get(timeout=30)
+                                
+                                if user.exists:
+                                    user_data = user.to_dict()
+                                    if user_data.get("password") == hash_password(password):
+                                        st.session_state.auth_user = email
+                                        st.rerun()
+                                    else:
+                                        st.error("Invalid password")
                                 else:
-                                    st.error("Invalid password")
-                            else:
-                                st.error("Account not found. Create one below.")
-                        except Exception as e:
-                            st.error(f"Connection error: {str(e)[:100]}")
-                            st.info("Check your internet connection and try again")
+                                    st.error("Account not found. Create one below.")
+                            except Exception as e:
+                                st.error(f"Connection timeout. Please try again.")
                     else:
                         # Dev mode or Firebase not configured
                         DEV_USERS = {"test@buffalo.edu": "test123", "ogunbowaleadeola@gmail.com": "admin123"}
@@ -467,7 +468,7 @@ if not user_email:
                             st.session_state.auth_user = email
                             st.rerun()
                         else:
-                            st.error("Invalid credentials (Dev mode)")
+                            st.error("Invalid credentials")
         
         st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
         
