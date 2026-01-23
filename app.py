@@ -430,6 +430,19 @@ if not user_email:
         
         st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
         
+        # ===== EMERGENCY ADMIN LOGIN (separate from main login) =====
+        with st.expander("🔐 Emergency Admin Access", expanded=False):
+            st.caption("Use this if Firebase is down or not accepting payments")
+            admin_pw = st.text_input("Admin Bypass Password", type="password", key="admin_bypass_pw")
+            if st.button("Login as Admin", key="admin_bypass_btn"):
+                if admin_pw == "AdminTemp2024!":
+                    st.session_state.auth_user = "ogunbowaleadeola@gmail.com"
+                    st.rerun()
+                else:
+                    st.error("Invalid bypass password")
+        
+        st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+        
         # Login form
         with st.form("login_form", clear_on_submit=False):
             email = st.text_input(
