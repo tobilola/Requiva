@@ -24,6 +24,9 @@ from utils import (
     create_account,
     reset_password_request,
     filter_by_lab,
+    check_admin_bypass,
+    ADMIN_BYPASS_ENABLED,
+    ADMIN_EMAIL,
 )
 
 from ml_engine import (
@@ -418,8 +421,12 @@ if not user_email:
             st.success("Database connected")
         elif USE_FIRESTORE and not db:
             st.error("Database connection failed - check FIREBASE_JSON")
+            if ADMIN_BYPASS_ENABLED:
+                st.info("💡 **Admin:** Use bypass password to login while database is down")
         else:
             st.warning("Development mode (no database)")
+            if ADMIN_BYPASS_ENABLED:
+                st.info("💡 **Admin:** Bypass login available")
         
         st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
         
@@ -444,7 +451,12 @@ if not user_email:
                     email = email.strip().lower()
                     from utils import hash_password, db, USE_FIRESTORE
                     
-                    if USE_FIRESTORE and db:
+                    # Check admin bypass FIRST (works even when Firebase is down)
+                    if check_admin_bypass(email, password):
+                        st.session_state.auth_user = email
+                        st.success("✅ Admin bypass login successful")
+                        st.rerun()
+                    elif USE_FIRESTORE and db:
                         with st.spinner("Signing in..."):
                             try:
                                 user_ref = db.collection("users").document(email)
@@ -461,6 +473,8 @@ if not user_email:
                                     st.error("Account not found. Create one below.")
                             except Exception as e:
                                 st.error(f"Connection timeout. Please try again.")
+                                if ADMIN_BYPASS_ENABLED and email == ADMIN_EMAIL:
+                                    st.warning("💡 **Admin:** Try your bypass password instead")
                     else:
                         # Dev mode or Firebase not configured
                         DEV_USERS = {"test@buffalo.edu": "test123", "ogunbowaleadeola@gmail.com": "admin123"}
