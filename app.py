@@ -868,7 +868,7 @@ if is_admin(user_email) and tab_import is not None:
                         preview_df['Vendor'] = df_import['Vendor'] if 'Vendor' in df_import.columns else ''
                         preview_df['Qty'] = df_import['Quantity'] if 'Quantity' in df_import.columns else 1
                         preview_df['Unit Price'] = df_import['Unit Price ($)'].apply(lambda x: f"${x:,.2f}" if pd.notna(x) else "") if 'Unit Price ($)' in df_import.columns else ''
-                        preview_df['Total'] = df_import['Line Total ($)'].apply(lambda x: f"${x:,.2f}" if pd.notna(x) else "") if 'Line Total ($)' in df_import.columns else ''
+                        preview_df['Line Total'] = df_import['Line Total ($)'].apply(lambda x: f"${x:,.2f}" if pd.notna(x) else "") if 'Line Total ($)' in df_import.columns else ''
                         preview_df['Grant'] = df_import['Grant'] if 'Grant' in df_import.columns else ''
                         
                         st.dataframe(preview_df.head(20), use_container_width=True, height=350)
@@ -951,6 +951,7 @@ if is_admin(user_email) and tab_import is not None:
                                 except:
                                     qty = 1
                                 
+                                # Unit Price = price per item, Line Total = total for line
                                 try:
                                     unit_price = float(row.get('Unit Price ($)', 0)) if pd.notna(row.get('Unit Price ($)')) else 0
                                 except:
@@ -1487,6 +1488,142 @@ with tab_analytics:
             metric_card("Pending", str(pending), "warning" if pending > 5 else "success")
         
         st.markdown("<br>", unsafe_allow_html=True)
+        
+        # ========== YEARLY SPENDING BY GRANT ==========
+        st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+        section_header("Yearly Spending by Grant")
+        
+        # Parse dates and extract year
+        df_dated = df.copy()
+        df_dated['DATE ORDERED'] = pd.to_datetime(df_dated['DATE ORDERED'], errors='coerce')
+        df_dated = df_dated[df_dated['DATE ORDERED'].notna()]
+        df_dated['YEAR'] = df_dated['DATE ORDERED'].dt.year
+        
+        if len(df_dated) > 0 and 'GRANT USED' in df_dated.columns:
+            # Get unique grants and years
+            grants = df_dated['GRANT USED'].dropna().unique()
+            grants = [g for g in grants if str(g).strip() and str(g) != 'nan']
+            years = sorted(df_dated['YEAR'].dropna().unique())
+            
+            if len(grants) > 0 and len(years) > 0:
+                # Create pivot table: Year x Grant
+                yearly_grant = df_dated.groupby(['YEAR', 'GRANT USED'])['TOTAL'].sum().unstack(fill_value=0)
+                
+                # Display table
+                st.markdown("**Spending by Year and Grant**")
+                
+                # Format as currency
+                display_yearly = yearly_grant.copy()
+                display_yearly.loc['TOTAL'] = display_yearly.sum()
+                display_yearly['YEAR TOTAL'] = display_yearly.sum(axis=1)
+                
+                # Format for display
+                formatted = display_yearly.apply(lambda col: col.apply(lambda x: f"${x:,.2f}" if pd.notna(x) else "$0.00"))
+                st.dataframe(formatted, use_container_width=True)
+                
+                # Projections for next year
+                st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+                st.markdown("**Next Year Projections**")
+                
+                current_year = int(max(years))
+                next_year = current_year + 1
+                
+                projection_data = []
+                
+                for grant in grants:
+                    grant_str = str(grant)
+                    if grant_str in yearly_grant.columns:
+                        grant_history = yearly_grant[grant_str]
+                        
+                        # Calculate projection based on trend
+                        values = grant_history.values
+                        years_list = list(grant_history.index)
+                        
+                        if len(values) >= 2:
+                            # Linear regression for trend
+                            x = np.array(range(len(values)))
+                            y = np.array(values)
+                            
+                            # Calculate slope and intercept
+                            n = len(x)
+                            slope = (n * np.sum(x * y) - np.sum(x) * np.sum(y)) / (n * np.sum(x**2) - np.sum(x)**2)
+                            intercept = (np.sum(y) - slope * np.sum(x)) / n
+                            
+                            # Project next year
+                            projected = intercept + slope * len(values)
+                            projected = max(0, projected)  # Can't be negative
+                            
+                            # Calculate growth rate
+                            if values[-1] > 0:
+                                growth = ((projected - values[-1]) / values[-1]) * 100
+                            else:
+                                growth = 0
+                            
+                            trend = "Up" if growth > 5 else "Down" if growth < -5 else "Stable"
+                            
+                        else:
+                            # Only one year of data - use same value
+                            projected = values[-1] if len(values) > 0 else 0
+                            growth = 0
+                            trend = "Stable"
+                        
+                        last_year_spend = values[-1] if len(values) > 0 else 0
+                        
+                        projection_data.append({
+                            'Grant': grant_str,
+                            f'{current_year} Actual': f"${last_year_spend:,.2f}",
+                            f'{next_year} Projected': f"${projected:,.2f}",
+                            'Trend': trend,
+                            'Change': f"{growth:+.1f}%"
+                        })
+                
+                if projection_data:
+                    proj_df = pd.DataFrame(projection_data)
+                    
+                    # Style the trend column
+                    def style_trend(val):
+                        if val == "Up":
+                            return "color: #dc2626"
+                        elif val == "Down":
+                            return "color: #059669"
+                        return "color: #6b7280"
+                    
+                    st.dataframe(proj_df, use_container_width=True)
+                    
+                    # Total projection
+                    total_current = df_dated[df_dated['YEAR'] == current_year]['TOTAL'].sum()
+                    total_projected = sum([float(p[f'{next_year} Projected'].replace('$', '').replace(',', '')) for p in projection_data])
+                    
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        metric_card(f"{current_year} Total", f"${total_current:,.2f}")
+                    with col2:
+                        metric_card(f"{next_year} Projected", f"${total_projected:,.2f}")
+                    with col3:
+                        change_pct = ((total_projected - total_current) / total_current * 100) if total_current > 0 else 0
+                        metric_card("Projected Change", f"{change_pct:+.1f}%", "warning" if change_pct > 10 else "success")
+                
+                # Chart: Yearly spending by grant
+                st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+                st.markdown("**Spending Trend by Grant**")
+                
+                fig, ax = plt.subplots(figsize=(10, 5))
+                yearly_grant.plot(kind='bar', ax=ax, width=0.8)
+                ax.set_xlabel("Year")
+                ax.set_ylabel("Spending ($)")
+                ax.legend(title="Grant", bbox_to_anchor=(1.02, 1), loc='upper left')
+                ax.spines['top'].set_visible(False)
+                ax.spines['right'].set_visible(False)
+                plt.xticks(rotation=0)
+                plt.tight_layout()
+                st.pyplot(fig)
+                
+            else:
+                st.info("Need orders with dates and grants for yearly analysis")
+        else:
+            st.info("Need orders with dates for yearly analysis")
+        
+        st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
         
         # Charts
         col1, col2 = st.columns(2)
