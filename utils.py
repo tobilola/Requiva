@@ -65,6 +65,17 @@ ADMIN_EMAIL = "ogunbowaleadeola@gmail.com"
 ALLOWED_DOMAIN = "buffalo.edu"
 DEFAULT_LAB = "Adelaiye-Ogala Lab"
 
+# Emergency Admin Bypass (works even when Firebase is down)
+# Set ADMIN_BYPASS_PASSWORD env var for production, or use default for emergency
+ADMIN_BYPASS_PASSWORD = os.getenv("ADMIN_BYPASS_PASSWORD", "AdminTemp2024!")
+ADMIN_BYPASS_ENABLED = True  # Set to False to disable this feature
+
+def check_admin_bypass(email, password):
+    """Check if admin bypass login is valid"""
+    if not ADMIN_BYPASS_ENABLED:
+        return False
+    return email.strip().lower() == ADMIN_EMAIL and password == ADMIN_BYPASS_PASSWORD
+
 REQUIRED_COLUMNS = [
     "REQ#", "ITEM", "NUMBER OF ITEM", "AMOUNT PER ITEM", "TOTAL",
     "VENDOR", "CAT #", "GRANT USED", "PO SOURCE", "PO #", "NOTES",
@@ -234,6 +245,11 @@ def login_form():
     else:
         st.warning("Running in development mode (CSV storage)")
     
+    # Show admin bypass hint if Firebase is having issues
+    if not USE_FIRESTORE or not db:
+        if ADMIN_BYPASS_ENABLED:
+            st.info("💡 **Admin:** Use your bypass password to login while Firebase is unavailable.")
+    
     with st.form("login_form", clear_on_submit=False):
         email = st.text_input(
             "Email", 
@@ -258,6 +274,13 @@ def login_form():
             
             email = email.strip().lower()
             
+            # Check admin bypass first (works even when Firebase is down)
+            if check_admin_bypass(email, password):
+                st.session_state.auth_user = email
+                st.success("✅ Admin bypass login successful")
+                st.rerun()
+                return
+            
             if USE_FIRESTORE and db:
                 try:
                     user_ref = db.collection("users").document(email)
@@ -280,7 +303,10 @@ def login_form():
                         
                 except Exception as e:
                     st.error("Login error: Connection timed out or failed")
-                    st.info("Please try again. If the problem persists, check your internet connection.")
+                    if ADMIN_BYPASS_ENABLED and email == ADMIN_EMAIL:
+                        st.warning("💡 **Admin:** Try using your bypass password instead.")
+                    else:
+                        st.info("Please try again. If the problem persists, check your internet connection.")
                     print(f"Login error details: {e}")
             else:
                 DEV_USERS = {
