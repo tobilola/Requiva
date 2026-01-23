@@ -18,37 +18,45 @@ except ImportError:
     FIREBASE_AVAILABLE = False
 
 # Firebase Configuration
-FIREBASE_JSON = (
-    os.getenv("FIREBASE_JSON") or 
-    os.getenv("firebase-service-account.json") or
-    os.getenv("FIREBASE_CREDENTIALS") or 
-    st.secrets.get("firebase", {}).get("service_account_json")
-)
+# Set SKIP_FIREBASE=true to bypass Firebase entirely (for emergencies)
+SKIP_FIREBASE = os.getenv("SKIP_FIREBASE", "").lower() in ("true", "1", "yes")
 
-USE_FIRESTORE = bool(FIREBASE_JSON) and FIREBASE_AVAILABLE
-
-if USE_FIRESTORE:
-    try:
-        if not firebase_admin._apps:
-            cred_dict = json.loads(FIREBASE_JSON)
-            cred = credentials.Certificate(cred_dict)
-            initialize_app(cred)
-        db = firestore.client()
-        print("Firebase initialized successfully")
-    except json.JSONDecodeError as e:
-        print(f"Firebase JSON parsing error: {e}")
-        USE_FIRESTORE = False
-        db = None
-    except Exception as e:
-        print(f"Firebase initialization failed: {e}")
-        USE_FIRESTORE = False
-        db = None
-else:
+if SKIP_FIREBASE:
+    print("SKIP_FIREBASE enabled - running in local CSV mode")
+    USE_FIRESTORE = False
     db = None
-    if FIREBASE_AVAILABLE:
-        print("Firebase credentials not found. Using CSV mode.")
+else:
+    FIREBASE_JSON = (
+        os.getenv("FIREBASE_JSON") or 
+        os.getenv("firebase-service-account.json") or
+        os.getenv("FIREBASE_CREDENTIALS") or 
+        st.secrets.get("firebase", {}).get("service_account_json")
+    )
+
+    USE_FIRESTORE = bool(FIREBASE_JSON) and FIREBASE_AVAILABLE
+
+    if USE_FIRESTORE:
+        try:
+            if not firebase_admin._apps:
+                cred_dict = json.loads(FIREBASE_JSON)
+                cred = credentials.Certificate(cred_dict)
+                initialize_app(cred)
+            db = firestore.client()
+            print("Firebase initialized successfully")
+        except json.JSONDecodeError as e:
+            print(f"Firebase JSON parsing error: {e}")
+            USE_FIRESTORE = False
+            db = None
+        except Exception as e:
+            print(f"Firebase initialization failed: {e}")
+            USE_FIRESTORE = False
+            db = None
     else:
-        print("Firebase Admin SDK not installed. Using CSV mode.")
+        db = None
+        if FIREBASE_AVAILABLE:
+            print("Firebase credentials not found. Using CSV mode.")
+        else:
+            print("Firebase Admin SDK not installed. Using CSV mode.")
 
 # Email Configuration
 EMAIL_ADDRESS = os.getenv("EMAIL_ADDRESS")
