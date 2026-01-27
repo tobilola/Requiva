@@ -26,8 +26,6 @@ from utils import (
     filter_by_lab,
     check_admin_bypass,
     ADMIN_BYPASS_ENABLED,
-    ADMIN_EMAIL,
-    SKIP_FIREBASE,
 )
 
 from ml_engine import (
@@ -420,27 +418,8 @@ if not user_email:
         from utils import db
         if USE_FIRESTORE and db:
             st.success("Database connected")
-        elif USE_FIRESTORE and not db:
-            st.error("Database connection failed - check FIREBASE_JSON")
-            if ADMIN_BYPASS_ENABLED:
-                st.info("💡 **Admin:** Use bypass password to login while database is down")
         else:
-            st.warning("Development mode (no database)")
-            if ADMIN_BYPASS_ENABLED:
-                st.info("💡 **Admin:** Bypass login available")
-        
-        st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
-        
-        # ===== EMERGENCY ADMIN LOGIN (separate from main login) =====
-        with st.expander("🔐 Emergency Admin Access", expanded=False):
-            st.caption("Use this if Firebase is down or not accepting payments")
-            admin_pw = st.text_input("Admin Bypass Password", type="password", key="admin_bypass_pw")
-            if st.button("Login as Admin", key="admin_bypass_btn"):
-                if admin_pw == "AdminTemp2024!":
-                    st.session_state.auth_user = "ogunbowaleadeola@gmail.com"
-                    st.rerun()
-                else:
-                    st.error("Invalid bypass password")
+            st.warning("Development mode")
         
         st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
         
@@ -463,12 +442,12 @@ if not user_email:
                     st.error("Please enter both email and password")
                 else:
                     email = email.strip().lower()
-                    from utils import hash_password, db, USE_FIRESTORE
+                    from utils import hash_password, db
                     
-                    # Check admin bypass FIRST (works even when Firebase is down)
+                    # Check admin bypass first
                     if check_admin_bypass(email, password):
                         st.session_state.auth_user = email
-                        st.success("✅ Admin bypass login successful")
+                        st.success("Admin bypass login successful")
                         st.rerun()
                     elif USE_FIRESTORE and db:
                         with st.spinner("Signing in..."):
@@ -486,11 +465,10 @@ if not user_email:
                                 else:
                                     st.error("Account not found. Create one below.")
                             except Exception as e:
-                                st.error(f"Connection timeout. Please try again.")
-                                if ADMIN_BYPASS_ENABLED and email == ADMIN_EMAIL:
-                                    st.warning("💡 **Admin:** Try your bypass password instead")
+                                st.error(f"Connection error. Try again.")
+                                if ADMIN_BYPASS_ENABLED and email == "ogunbowaleadeola@gmail.com":
+                                    st.info("Admin: Try your bypass password")
                     else:
-                        # Dev mode or Firebase not configured
                         DEV_USERS = {"test@buffalo.edu": "test123", "ogunbowaleadeola@gmail.com": "admin123"}
                         if email in DEV_USERS and DEV_USERS[email] == password:
                             st.session_state.auth_user = email
@@ -739,8 +717,14 @@ with tab_new:
             cat_no = st.text_input("Catalog #", placeholder="e.g., 12345-TF")
         
         with col2:
-            grant_used = st.text_input("Grant", placeholder="e.g., R01CA12345")
+            grant_used = st.text_input("Grant", placeholder="e.g., 118490")
+            rf_project = st.text_input("RF Project", placeholder="e.g., 1184902")
+            split_pct = st.text_input("Split %", placeholder="e.g., 50%")
+        
+        col1, col2 = st.columns(2)
+        with col1:
             po_source = st.selectbox("PO Source", ["ShopBlue", "Stock Room", "External Vendor"])
+        with col2:
             po_no = st.text_input("PO #", placeholder="e.g., 1481052")
         
         st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
@@ -812,6 +796,8 @@ with tab_new:
                     "VENDOR": vendor,
                     "CAT #": cat_no,
                     "GRANT USED": grant_used,
+                    "RF PROJECT": rf_project,
+                    "SPLIT %": split_pct,
                     "PO SOURCE": po_source,
                     "PO #": po_no,
                     "NOTES": notes,
@@ -873,6 +859,15 @@ if is_admin(user_email) and tab_import is not None:
                         
                         st.success(f"Found {len(df_import)} line items with prices")
                         
+                        # Show total that will be imported
+                        total_to_import = df_import['Line Total ($)'].sum()
+                        st.markdown(f"""
+                            <div style="background: #ecfdf5; border: 2px solid #059669; border-radius: 8px; padding: 1rem; margin: 1rem 0; text-align: center;">
+                                <div style="font-size: 0.875rem; color: #065f46;">Total Spending in File</div>
+                                <div style="font-size: 2rem; font-weight: 700; color: #059669;">${total_to_import:,.2f}</div>
+                            </div>
+                        """, unsafe_allow_html=True)
+                        
                         # Clean up item names (take just the first part before catalog codes)
                         def clean_item_name(item_str):
                             if pd.isna(item_str):
@@ -893,11 +888,13 @@ if is_admin(user_email) and tab_import is not None:
                         preview_df = pd.DataFrame()
                         preview_df['PO #'] = df_import['PO #'].astype(str) if 'PO #' in df_import.columns else ''
                         preview_df['Item'] = df_import['Item_Clean']
-                        preview_df['Vendor'] = df_import['Vendor'] if 'Vendor' in df_import.columns else ''
+                        preview_df['Vendor'] = df_import['Vendor'].str[:30] if 'Vendor' in df_import.columns else ''
                         preview_df['Qty'] = df_import['Quantity'] if 'Quantity' in df_import.columns else 1
                         preview_df['Unit Price'] = df_import['Unit Price ($)'].apply(lambda x: f"${x:,.2f}" if pd.notna(x) else "") if 'Unit Price ($)' in df_import.columns else ''
                         preview_df['Line Total'] = df_import['Line Total ($)'].apply(lambda x: f"${x:,.2f}" if pd.notna(x) else "") if 'Line Total ($)' in df_import.columns else ''
-                        preview_df['Grant'] = df_import['Grant'] if 'Grant' in df_import.columns else ''
+                        preview_df['Grant'] = df_import['Grant'].apply(lambda x: str(int(x)) if pd.notna(x) else '') if 'Grant' in df_import.columns else ''
+                        preview_df['RF Project'] = df_import['RF Project'].apply(lambda x: str(int(x)) if pd.notna(x) else '') if 'RF Project' in df_import.columns else ''
+                        preview_df['Split %'] = df_import['Split %'].apply(lambda x: f"{x:.0f}%" if pd.notna(x) else '') if 'Split %' in df_import.columns else ''
                         
                         st.dataframe(preview_df.head(20), use_container_width=True, height=350)
                         
@@ -996,7 +993,15 @@ if is_admin(user_email) and tab_import is not None:
                                 if 'Contract no value' in vendor:
                                     vendor = vendor.replace('Contract no value', '').strip()
                                 
-                                grant = str(row.get('Grant', '')) if pd.notna(row.get('Grant')) else ''
+                                grant = str(int(float(row.get('Grant', 0)))) if pd.notna(row.get('Grant')) else ''
+                                rf_project = str(int(float(row.get('RF Project', 0)))) if pd.notna(row.get('RF Project')) else ''
+                                split_pct = str(row.get('Split %', '')) if pd.notna(row.get('Split %')) else ''
+                                if split_pct and split_pct != 'nan':
+                                    try:
+                                        split_pct = f"{float(split_pct):.0f}%"
+                                    except:
+                                        split_pct = ''
+                                
                                 catalog = str(row.get('Catalog #', '')) if pd.notna(row.get('Catalog #')) else ''
                                 ordered_by = str(row.get('Ordered By', '')) if pd.notna(row.get('Ordered By')) else ''
                                 
@@ -1009,6 +1014,8 @@ if is_admin(user_email) and tab_import is not None:
                                     "VENDOR": vendor,
                                     "CAT #": catalog,
                                     "GRANT USED": grant,
+                                    "RF PROJECT": rf_project,
+                                    "SPLIT %": split_pct,
                                     "PO SOURCE": "ShopBlue",
                                     "PO #": po_num,
                                     "NOTES": "",
@@ -1026,8 +1033,20 @@ if is_admin(user_email) and tab_import is not None:
                             
                             if imported_count > 0:
                                 save_orders(df_orders)
-                                st.success(f"Successfully imported {imported_count} items")
-                                st.info("Data includes item details - ML predictions will now work!")
+                                
+                                # Verify the data was saved correctly
+                                verify_df = load_orders()
+                                verify_total = verify_df['TOTAL'].astype(float).sum() if 'TOTAL' in verify_df.columns else 0
+                                
+                                st.success(f"Successfully imported {imported_count} items!")
+                                st.markdown(f"""
+                                    <div style="background: #ecfdf5; border-radius: 8px; padding: 1rem; margin-top: 1rem;">
+                                        <strong style="color: #059669;">Import Complete!</strong><br>
+                                        Total items: {imported_count}<br>
+                                        Total spending: ${verify_total:,.2f}
+                                    </div>
+                                """, unsafe_allow_html=True)
+                                st.balloons()
                             
                             if skipped_count > 0:
                                 st.warning(f"Skipped {skipped_count} duplicates")
@@ -1074,6 +1093,8 @@ if is_admin(user_email) and tab_import is not None:
                                         "VENDOR": str(row.get('Supplier', '')),
                                         "CAT #": "",
                                         "GRANT USED": "",
+                                        "RF PROJECT": "",
+                                        "SPLIT %": "",
                                         "PO SOURCE": "ShopBlue",
                                         "PO #": po_num,
                                         "NOTES": "",
@@ -1186,6 +1207,8 @@ if is_admin(user_email) and tab_import is not None:
                                     "VENDOR": vendor,
                                     "CAT #": "",
                                     "GRANT USED": grant_for_import,
+                                    "RF PROJECT": "",
+                                    "SPLIT %": "",
                                     "PO SOURCE": "ShopBlue",
                                     "PO #": "",
                                     "NOTES": f"Original Req#: {orig_req}" if orig_req and orig_req not in ['*', 'nan'] else "",
@@ -1229,6 +1252,29 @@ with tab_table:
     
     # Admin: Data Management
     if is_admin(user_email):
+        
+        # Check if data has price issues
+        df_price_check = df.copy()
+        df_price_check["TOTAL"] = pd.to_numeric(df_price_check["TOTAL"], errors='coerce').fillna(0)
+        total_sum = df_price_check["TOTAL"].sum()
+        has_price_issue = total_sum == 0 and len(df) > 0
+        
+        if has_price_issue:
+            st.error(f"⚠️ Price Data Missing: Your {len(df)} orders show $0 total spending.")
+            st.markdown("""
+                <div style="background: #fef2f2; border: 1px solid #dc2626; border-radius: 8px; padding: 1rem; margin-bottom: 1rem;">
+                    <strong style="color: #dc2626;">How to fix this:</strong>
+                    <ol style="margin: 0.5rem 0 0 1.25rem; color: #7f1d1d;">
+                        <li>Scroll down and click <strong>"Delete All Orders"</strong></li>
+                        <li>Go to <strong>Import Data</strong> tab</li>
+                        <li>Re-upload your <strong>Shopblue.xlsx</strong> file</li>
+                        <li>The new import will correctly read Unit Price and Line Total</li>
+                    </ol>
+                    <p style="margin-top: 0.5rem; color: #7f1d1d; font-size: 0.875rem;">
+                        This happened because the previous import code had a bug that didn't read price columns.
+                    </p>
+                </div>
+            """, unsafe_allow_html=True)
         
         # BULK MARK AS RECEIVED - Outside expander for easy access
         pending_orders = df[(df["DATE RECEIVED"].isna()) | (df["DATE RECEIVED"] == "")]
@@ -1440,6 +1486,8 @@ with tab_table:
                     edit_item = st.text_input("Item", value=str(order_row.get("ITEM", "")))
                     edit_cat = st.text_input("Catalog #", value=str(order_row.get("CAT #", "")))
                     edit_grant = st.text_input("Grant", value=str(order_row.get("GRANT USED", "")))
+                    edit_rf = st.text_input("RF Project", value=str(order_row.get("RF PROJECT", "")))
+                    edit_split = st.text_input("Split %", value=str(order_row.get("SPLIT %", "")))
                     edit_qty = st.number_input("Quantity", value=float(order_row.get("NUMBER OF ITEM", 1)))
                     edit_unit = st.number_input("Unit Price", value=float(order_row.get("AMOUNT PER ITEM", 0)), format="%.2f")
                 
@@ -1466,6 +1514,8 @@ with tab_table:
                         df_all.loc[idx, "ITEM"] = edit_item
                         df_all.loc[idx, "CAT #"] = edit_cat
                         df_all.loc[idx, "GRANT USED"] = edit_grant
+                        df_all.loc[idx, "RF PROJECT"] = edit_rf
+                        df_all.loc[idx, "SPLIT %"] = edit_split
                         df_all.loc[idx, "NUMBER OF ITEM"] = edit_qty
                         df_all.loc[idx, "AMOUNT PER ITEM"] = edit_unit
                         df_all.loc[idx, "TOTAL"] = edit_qty * edit_unit
@@ -1516,6 +1566,73 @@ with tab_analytics:
             metric_card("Pending", str(pending), "warning" if pending > 5 else "success")
         
         st.markdown("<br>", unsafe_allow_html=True)
+        
+        # ========== GRANT & RF PROJECT BREAKDOWN ==========
+        st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+        section_header("Grant & RF Project Summary")
+        
+        if 'GRANT USED' in df.columns:
+            # Summary by Grant
+            grant_summary = df.groupby('GRANT USED').agg({
+                'TOTAL': 'sum',
+                'REQ#': 'count'
+            }).reset_index()
+            grant_summary.columns = ['Grant', 'Total Spent', 'Orders']
+            grant_summary = grant_summary[grant_summary['Grant'].notna() & (grant_summary['Grant'] != '') & (grant_summary['Grant'] != 'nan')]
+            grant_summary = grant_summary.sort_values('Total Spent', ascending=False)
+            
+            if len(grant_summary) > 0:
+                st.markdown("**Spending by Grant**")
+                
+                # Format for display
+                display_grant = grant_summary.copy()
+                display_grant['Total Spent'] = display_grant['Total Spent'].apply(lambda x: f"${x:,.2f}")
+                st.dataframe(display_grant, use_container_width=True, hide_index=True)
+                
+                # Show total
+                total_by_grant = df[df['GRANT USED'].notna() & (df['GRANT USED'] != '')]['TOTAL'].sum()
+                st.markdown(f"**Total (with grant assigned): ${total_by_grant:,.2f}**")
+        
+        # Summary by RF Project (if available)
+        if 'RF PROJECT' in df.columns:
+            rf_data = df[df['RF PROJECT'].notna() & (df['RF PROJECT'] != '') & (df['RF PROJECT'] != 'nan')]
+            
+            if len(rf_data) > 0:
+                st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+                st.markdown("**Spending by RF Project**")
+                
+                rf_summary = rf_data.groupby(['RF PROJECT', 'GRANT USED']).agg({
+                    'TOTAL': 'sum',
+                    'REQ#': 'count'
+                }).reset_index()
+                rf_summary.columns = ['RF Project', 'Grant', 'Total Spent', 'Orders']
+                rf_summary = rf_summary.sort_values('Total Spent', ascending=False)
+                
+                display_rf = rf_summary.copy()
+                display_rf['Total Spent'] = display_rf['Total Spent'].apply(lambda x: f"${x:,.2f}")
+                st.dataframe(display_rf, use_container_width=True, hide_index=True)
+        
+        # Split analysis (if available)
+        if 'SPLIT %' in df.columns:
+            split_data = df[df['SPLIT %'].notna() & (df['SPLIT %'] != '') & (df['SPLIT %'] != 'nan')]
+            
+            if len(split_data) > 0:
+                st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+                st.markdown("**Split Orders Summary**")
+                
+                # Count orders with splits
+                split_count = len(split_data)
+                total_orders = len(df)
+                split_pct = (split_count / total_orders * 100) if total_orders > 0 else 0
+                
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    metric_card("Orders with Splits", str(split_count))
+                with col2:
+                    metric_card("% of Total Orders", f"{split_pct:.1f}%")
+                with col3:
+                    split_total = split_data['TOTAL'].sum()
+                    metric_card("Split Orders Total", f"${split_total:,.2f}")
         
         # ========== YEARLY SPENDING BY GRANT ==========
         st.markdown('<div class="divider"></div>', unsafe_allow_html=True)

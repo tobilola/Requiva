@@ -86,7 +86,7 @@ def check_admin_bypass(email, password):
 
 REQUIRED_COLUMNS = [
     "REQ#", "ITEM", "NUMBER OF ITEM", "AMOUNT PER ITEM", "TOTAL",
-    "VENDOR", "CAT #", "GRANT USED", "PO SOURCE", "PO #", "NOTES",
+    "VENDOR", "CAT #", "GRANT USED", "RF PROJECT", "SPLIT %", "PO SOURCE", "PO #", "NOTES",
     "ORDERED BY", "DATE ORDERED", "DATE RECEIVED", "RECEIVED BY", "ITEM LOCATION", "LAB"
 ]
 
