@@ -840,11 +840,37 @@ if is_admin(user_email) and tab_import is not None:
             
             if uploaded_file is not None:
                 try:
-                    # Read file with header at row 0
-                    df_import = pd.read_excel(uploaded_file, header=0)
+                    # Some exports keep the first sheet blank and put the real
+                    # line items on another sheet (e.g. "All Items"), so scan
+                    # every sheet and use the first one that has an item column.
+                    xl = pd.ExcelFile(uploaded_file)
+                    df_import = None
+                    for sheet in xl.sheet_names:
+                        tmp = pd.read_excel(xl, sheet_name=sheet, header=0)
+                        tmp.columns = tmp.columns.astype(str).str.strip()
+                        if 'Item' in tmp.columns or 'Item Name' in tmp.columns:
+                            df_import = tmp
+                            break
+                    if df_import is None:
+                        # No item column found on any sheet; fall back to first sheet
+                        df_import = pd.read_excel(xl, sheet_name=0, header=0)
+                        df_import.columns = df_import.columns.astype(str).str.strip()
                     
-                    # Strip whitespace from column names
-                    df_import.columns = df_import.columns.str.strip()
+                    # Normalize alternate column names so different export layouts
+                    # (e.g. the Receipts summary export) all map to what we expect.
+                    if 'Item' not in df_import.columns and 'Item Name' in df_import.columns:
+                        df_import['Item'] = df_import['Item Name']
+                    # Prefer the numeric grant id ("Grant Number") over the text
+                    # category column that is also sometimes called "Grant".
+                    if 'Grant Number' in df_import.columns:
+                        df_import['Grant'] = df_import['Grant Number']
+                    
+                    # Force the money/quantity columns to be real numbers. These
+                    # columns can arrive as mixed text/number, which would crash
+                    # the "price > 0" filter and the total-spending sum below.
+                    for _numcol in ['Unit Price ($)', 'Line Total ($)', 'Quantity']:
+                        if _numcol in df_import.columns:
+                            df_import[_numcol] = pd.to_numeric(df_import[_numcol], errors='coerce')
                     
                     # Check if it's the line-item format (has Item column)
                     has_item_col = 'Item' in df_import.columns
@@ -881,6 +907,22 @@ if is_admin(user_email) and tab_import is not None:
                             # Otherwise take first 100 chars
                             return item_str[:100].strip()
                         
+                        # Normalize grant / RF ids so "116925.0", "116925" and
+                        # "116925 " all compare equal when building duplicate keys.
+                        def _norm_id(v):
+                            try:
+                                return str(int(float(v)))
+                            except:
+                                s = str(v).strip()
+                                return '' if s.lower() == 'nan' else s
+                        
+                        # Normalize a money amount to 2 decimals for use in keys.
+                        def _amt(v):
+                            try:
+                                return f"{float(v):.2f}"
+                            except:
+                                return ''
+                        
                         df_import['Item_Clean'] = df_import['Item'].apply(clean_item_name)
                         
                         # Show preview with cleaned names
@@ -888,7 +930,7 @@ if is_admin(user_email) and tab_import is not None:
                         preview_df = pd.DataFrame()
                         preview_df['PO #'] = df_import['PO #'].astype(str) if 'PO #' in df_import.columns else ''
                         preview_df['Item'] = df_import['Item_Clean']
-                        preview_df['Vendor'] = df_import['Vendor'].str[:30] if 'Vendor' in df_import.columns else ''
+                        preview_df['Vendor'] = df_import['Vendor'].astype(str).str[:30] if 'Vendor' in df_import.columns else ''
                         preview_df['Qty'] = df_import['Quantity'] if 'Quantity' in df_import.columns else 1
                         preview_df['Unit Price'] = df_import['Unit Price ($)'].apply(lambda x: f"${x:,.2f}" if pd.notna(x) else "") if 'Unit Price ($)' in df_import.columns else ''
                         preview_df['Line Total'] = df_import['Line Total ($)'].apply(lambda x: f"${x:,.2f}" if pd.notna(x) else "") if 'Line Total ($)' in df_import.columns else ''
@@ -920,13 +962,22 @@ if is_admin(user_email) and tab_import is not None:
                         existing_items = set()
                         if not df_orders.empty:
                             for _, row in df_orders.iterrows():
-                                key = f"{row.get('PO #', '')}_{str(row.get('ITEM', ''))[:30]}"
+                                g = _norm_id(row.get('GRANT USED', ''))
+                                rf = _norm_id(row.get('RF PROJECT', ''))
+                                amt = _amt(row.get('TOTAL', ''))
+                                key = f"{row.get('PO #', '')}_{str(row.get('ITEM', ''))}_{g}_{rf}_{amt}"
                                 existing_items.add(key)
                         
-                        # Count potential duplicates
+                        # Count potential duplicates. The key uses the full item name
+                        # plus grant, RF project and amount, so genuinely different
+                        # line items (and grant-split lines) are all kept; only a truly
+                        # identical row (e.g. re-uploading the same file) is skipped.
                         dup_count = 0
                         for _, row in df_import.iterrows():
-                            key = f"{row.get('PO #', '')}_{str(row.get('Item_Clean', ''))[:30]}"
+                            g = _norm_id(row.get('Grant', ''))
+                            rf = _norm_id(row.get('RF Project', ''))
+                            amt = _amt(row.get('Line Total ($)', ''))
+                            key = f"{row.get('PO #', '')}_{str(row.get('Item_Clean', ''))}_{g}_{rf}_{amt}"
                             if key in existing_items:
                                 dup_count += 1
                         
@@ -949,8 +1000,13 @@ if is_admin(user_email) and tab_import is not None:
                                 
                                 po_num = str(row.get('PO #', ''))
                                 
-                                # Check for duplicate
-                                key = f"{po_num}_{item_name[:30]}"
+                                # Check for duplicate. Full item name + grant + RF +
+                                # amount, so split-funded lines and different items are
+                                # all kept; re-uploading the same file still skips.
+                                _kg = _norm_id(row.get('Grant', ''))
+                                _krf = _norm_id(row.get('RF Project', ''))
+                                _kamt = _amt(row.get('Line Total ($)', ''))
+                                key = f"{po_num}_{item_name}_{_kg}_{_krf}_{_kamt}"
                                 if key in existing_items:
                                     skipped_count += 1
                                     continue
@@ -993,8 +1049,20 @@ if is_admin(user_email) and tab_import is not None:
                                 if 'Contract no value' in vendor:
                                     vendor = vendor.replace('Contract no value', '').strip()
                                 
-                                grant = str(int(float(row.get('Grant', 0)))) if pd.notna(row.get('Grant')) else ''
-                                rf_project = str(int(float(row.get('RF Project', 0)))) if pd.notna(row.get('RF Project')) else ''
+                                # Grant / RF project: prefer a clean numeric id,
+                                # but fall back to the raw text if it isn't numeric.
+                                try:
+                                    grant = str(int(float(row.get('Grant', 0)))) if pd.notna(row.get('Grant')) else ''
+                                except:
+                                    grant = str(row.get('Grant', '')).strip() if pd.notna(row.get('Grant')) else ''
+                                    if grant == 'nan':
+                                        grant = ''
+                                try:
+                                    rf_project = str(int(float(row.get('RF Project', 0)))) if pd.notna(row.get('RF Project')) else ''
+                                except:
+                                    rf_project = str(row.get('RF Project', '')).strip() if pd.notna(row.get('RF Project')) else ''
+                                    if rf_project == 'nan':
+                                        rf_project = ''
                                 split_pct = str(row.get('Split %', '')) if pd.notna(row.get('Split %')) else ''
                                 if split_pct and split_pct != 'nan':
                                     try:
@@ -1055,6 +1123,7 @@ if is_admin(user_email) and tab_import is not None:
                         # Try OLD FORMAT: PO-level summary (header at row 9)
                         uploaded_file.seek(0)
                         df_import = pd.read_excel(uploaded_file, header=9)
+                        df_import.columns = df_import.columns.astype(str).str.strip()
                         
                         expected_cols = ['PO Number', 'Supplier', 'Total Amount']
                         if not all(col in df_import.columns for col in expected_cols):
@@ -1140,8 +1209,22 @@ if is_admin(user_email) and tab_import is not None:
                     else:
                         selected_sheet = xl.sheet_names[0]
                     
-                    df_import = pd.read_excel(xl, sheet_name=selected_sheet)
-                    df_import.columns = df_import.columns.str.strip()
+                    # Read the whole sheet with no header first so we can locate the
+                    # real header row (some files have title/blank rows on top, which
+                    # makes pandas use numeric column names and breaks .str).
+                    raw = pd.read_excel(xl, sheet_name=selected_sheet, header=None)
+                    
+                    header_row = 0
+                    for i in range(min(20, len(raw))):
+                        row_values = [str(v).strip().lower() for v in raw.iloc[i].tolist()]
+                        if 'item' in row_values:
+                            header_row = i
+                            break
+                    
+                    # Re-read using the detected header row
+                    df_import = pd.read_excel(xl, sheet_name=selected_sheet, header=header_row)
+                    # Force column names to strings before stripping whitespace
+                    df_import.columns = df_import.columns.astype(str).str.strip()
                     
                     if 'Item' in df_import.columns:
                         df_import = df_import.dropna(subset=['Item'])
@@ -1233,6 +1316,7 @@ if is_admin(user_email) and tab_import is not None:
                                 st.warning(f"Skipped {skipped_count} duplicates")
                     else:
                         st.error("Could not find 'Item' column")
+                        st.info(f"Columns found on the detected header row: {', '.join(map(str, df_import.columns))}")
                 
                 except Exception as e:
                     st.error(f"Error: {str(e)}")
