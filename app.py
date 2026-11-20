@@ -24,12 +24,10 @@ from utils import (
     create_account,
     reset_password_request,
     filter_by_lab,
-    check_admin_bypass,
-    ADMIN_BYPASS_ENABLED,
 )
 
 from supply_hub import show_hub
-from friendly_ui import profile_editor, welcome
+from friendly_ui import welcome
 
 from ml_engine import (
     predict_reorder_date,
@@ -447,7 +445,6 @@ if not user_email:
                     email = email.strip().lower()
                     from utils import hash_password, db
                     
-                    # Check admin bypass first
                     if USE_FIRESTORE and db:
                         with st.spinner("Signing in..."):
                             try:
@@ -465,8 +462,6 @@ if not user_email:
                                     st.error("Account not found. Create one below.")
                             except Exception as e:
                                 st.error(f"Connection error. Try again.")
-                                if ADMIN_BYPASS_ENABLED and email == "ogunbowaleadeola@gmail.com":
-                                    st.info("Admin: Try your bypass password")
                     else:
                         st.error("Secure login requires Firestore to be configured.")
         
@@ -531,7 +526,6 @@ with st.sidebar:
         </div>
     """, unsafe_allow_html=True)
     
-    profile_editor(user_email)
 
     if is_admin(user_email):
         st.markdown("""
@@ -548,34 +542,15 @@ with st.sidebar:
     
     st.markdown('<div class="divider" style="background: rgba(255,255,255,0.2);"></div>', unsafe_allow_html=True)
     
-    # Quick stats in sidebar
-    df_sidebar = load_orders()
-    df_sidebar = filter_by_lab(df_sidebar, user_email)
-    
-    if not df_sidebar.empty:
-        total_orders = len(df_sidebar)
-        pending = len(df_sidebar[(df_sidebar["DATE RECEIVED"].isna()) | (df_sidebar["DATE RECEIVED"] == "")])
-        
-        st.markdown(f"""
-            <div style="padding: 0.5rem 0;">
-                <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
-                    <span style="opacity: 0.8;">Total Orders</span>
-                    <span style="font-weight: 600;">{total_orders}</span>
-                </div>
-                <div style="display: flex; justify-content: space-between;">
-                    <span style="opacity: 0.8;">Pending</span>
-                    <span style="font-weight: 600; color: #fbbf24;">{pending}</span>
-                </div>
-            </div>
-        """, unsafe_allow_html=True)
 
-# Main content header
-st.markdown("""
-    <div style="margin-bottom: 1.5rem;">
-        <h1 style="margin-bottom: 0.25rem;">Dashboard</h1>
-        <p style="color: #6b7280; margin: 0;">Manage your lab orders and inventory</p>
-    </div>
-""", unsafe_allow_html=True)
+# Main content header — the first Supply Hub tab has its own illustrated welcome.
+st.markdown("""<style>
+:root {--requiva-purple:#7039c5}
+.stTabs [data-baseweb="tab-list"]{background:#f7f3ff!important;border:1px solid #e9def9!important;border-radius:14px!important;padding:6px!important;gap:5px!important}
+.stTabs [data-baseweb="tab"]{border-radius:10px!important;font-weight:650!important}
+.stTabs [aria-selected="true"]{background:linear-gradient(115deg,#7135c8,#9c53df)!important;color:white!important;box-shadow:0 4px 12px #7135c833!important}
+.stTabs [aria-selected="true"] p{color:white!important}
+</style>""", unsafe_allow_html=True)
 
 # Main Tabs — Supply Hub is first; all existing tabs remain.
 if is_admin(user_email):

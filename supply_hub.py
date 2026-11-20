@@ -258,9 +258,13 @@ def show_notifications(email):
 
 def show_hub(email):
     email = email.strip().lower()
-    st.title('Laboratory Supply Hub')
-    st.caption('Shared requests • Duplicate checks • ShopBlue / Stockroom • Receiving')
-    with st.expander('📖 How Requiva Works — Quick Handbook', expanded=False):
+    st.markdown('### Your lab supply workspace')
+    st.caption('Shared requests · ShopBlue / Stockroom · Deliveries · Notifications')
+    with st.expander('📖 How Requiva Works — Quick Handbook', expanded=st.session_state.get('rq_expand_handbook', False)):
+        from pathlib import Path
+        handbook_guide = Path(__file__).with_name('handbook_scientist.png')
+        if handbook_guide.is_file():
+            st.image(str(handbook_guide), width=140, caption='Your friendly lab guide')
         st.markdown("""
         ### For every lab member
         **1. Check the Shared request board first.** Search the visible requests before asking for an item again. Each lab sees its own requests; the administrator can see all labs.
@@ -299,11 +303,6 @@ def show_hub(email):
         shown = rows if chosen_lab == 'All laboratories' else [r for r in rows if r['lab'] == chosen_lab]
     else:
         shown = rows
-    a, b, c, d = st.columns(4)
-    a.metric('Requested / Approved', sum(r['status'] in ('Requested', 'Approved') for r in shown))
-    b.metric('Ordered', sum(r['status'] == 'Ordered' for r in shown))
-    c.metric('Partially received', sum(r['status'] == 'Partially Received' for r in shown))
-    d.metric('Received', sum(r['status'] == 'Received' for r in shown))
     st.subheader('Shared request board')
     if shown:
         display = []
@@ -326,7 +325,7 @@ def show_hub(email):
         st.dataframe(pd.DataFrame(display), use_container_width=True, hide_index=True)
     else:
         st.info('No requests yet. Submit the first request below.')
-    with st.expander('➕ Request supplies', expanded=not bool(shown)):
+    with st.expander('➕ Request supplies', expanded=st.session_state.get('rq_expand_request', False) or not bool(shown)):
         with st.form('new_supply_request'):
             item = st.text_input('Item name *')
             qcol, pcol = st.columns(2)
