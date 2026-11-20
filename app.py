@@ -28,6 +28,8 @@ from utils import (
     ADMIN_BYPASS_ENABLED,
 )
 
+from supply_hub import show_hub
+
 from ml_engine import (
     predict_reorder_date,
     forecast_spending,
@@ -445,11 +447,7 @@ if not user_email:
                     from utils import hash_password, db
                     
                     # Check admin bypass first
-                    if check_admin_bypass(email, password):
-                        st.session_state.auth_user = email
-                        st.success("Admin bypass login successful")
-                        st.rerun()
-                    elif USE_FIRESTORE and db:
+                    if USE_FIRESTORE and db:
                         with st.spinner("Signing in..."):
                             try:
                                 user_ref = db.collection("users").document(email)
@@ -469,12 +467,7 @@ if not user_email:
                                 if ADMIN_BYPASS_ENABLED and email == "ogunbowaleadeola@gmail.com":
                                     st.info("Admin: Try your bypass password")
                     else:
-                        DEV_USERS = {"test@buffalo.edu": "test123", "ogunbowaleadeola@gmail.com": "admin123"}
-                        if email in DEV_USERS and DEV_USERS[email] == password:
-                            st.session_state.auth_user = email
-                            st.rerun()
-                        else:
-                            st.error("Invalid credentials")
+                        st.error("Secure login requires Firestore to be configured.")
         
         st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
         
@@ -581,25 +574,19 @@ st.markdown("""
     </div>
 """, unsafe_allow_html=True)
 
-# Main Tabs - Import only visible to admins
+# Main Tabs — Supply Hub is first; all existing tabs remain.
 if is_admin(user_email):
-    tab_dashboard, tab_new, tab_import, tab_table, tab_analytics, tab_export = st.tabs([
-        "Overview",
-        "New Order", 
-        "Import Data",
-        "All Orders", 
-        "Analytics",
-        "Export"
+    tab_supply, tab_dashboard, tab_new, tab_import, tab_table, tab_analytics, tab_export = st.tabs([
+        "Supply Hub", "Overview", "New Order", "Import Data", "All Orders", "Analytics", "Export"
     ])
 else:
-    tab_dashboard, tab_new, tab_table, tab_analytics, tab_export = st.tabs([
-        "Overview",
-        "New Order", 
-        "All Orders", 
-        "Analytics",
-        "Export"
+    tab_supply, tab_dashboard, tab_new, tab_table, tab_analytics, tab_export = st.tabs([
+        "Supply Hub", "Overview", "New Order", "All Orders", "Analytics", "Export"
     ])
-    tab_import = None  # Not available for non-admins
+    tab_import = None
+
+with tab_supply:
+    show_hub(user_email)
 
 # ============== TAB: Dashboard Overview ==============
 with tab_dashboard:
@@ -761,7 +748,8 @@ with tab_new:
         
         st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
         
-        received_flag = st.checkbox("Mark as received")
+        received_flag = st.checkbox("Mark as received", disabled=not is_admin(user_email),
+                                         help="Only administrators can record receipts in the legacy New Order form. Designated lab receivers use Supply Hub.")
         
         if received_flag:
             col1, col2, col3 = st.columns(3)
