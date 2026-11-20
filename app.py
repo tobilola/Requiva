@@ -29,6 +29,7 @@ from utils import (
 )
 
 from supply_hub import show_hub
+from friendly_ui import profile_editor, welcome
 
 from ml_engine import (
     predict_reorder_date,
@@ -530,6 +531,8 @@ with st.sidebar:
         </div>
     """, unsafe_allow_html=True)
     
+    profile_editor(user_email)
+
     if is_admin(user_email):
         st.markdown("""
             <div style="background: rgba(255,255,255,0.15); padding: 0.5rem; border-radius: 6px; margin-top: 0.5rem;">
@@ -586,6 +589,7 @@ else:
     tab_import = None
 
 with tab_supply:
+    welcome(user_email)
     show_hub(user_email)
 
 # ============== TAB: Dashboard Overview ==============
