@@ -10,3 +10,5 @@ python-dotenv
 scikit-learn
 numpy
 scipy
+
+psycopg2-binary
